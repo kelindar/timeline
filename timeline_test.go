@@ -139,19 +139,32 @@ func TestRunEveryAfter(t *testing.T) {
 	assert.Equal(t, 12, count.Value())
 }
 
-func TestRunEvery(t *testing.T) {
+func TestRunEvery10ms(t *testing.T) {
 	now := time.Unix(0, 0)
 	var count Counter
 
 	s := newScheduler(now)
 	s.RunEvery(count.Inc(), 10*time.Millisecond)
-	s.RunEvery(count.Inc(), 30*time.Millisecond)
 
 	for i := 0; i < 10; i++ {
 		s.Tick()
 	}
 
-	assert.Equal(t, 12, count.Value())
+	assert.Equal(t, 9, count.Value())
+}
+
+func TestRunEvery1s(t *testing.T) {
+	now := time.Unix(0, 0)
+	var count Counter
+
+	s := newScheduler(now)
+	s.RunEvery(count.Inc(), 1*time.Second)
+
+	for i := 0; i < 510; i++ {
+		s.Tick()
+	}
+
+	assert.Equal(t, 5, count.Value())
 }
 
 func TestRun(t *testing.T) {
