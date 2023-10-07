@@ -114,16 +114,16 @@ func (s *Scheduler) Tick() time.Time {
 	bucket.mu.Lock()
 	defer bucket.mu.Unlock()
 
-	for i, evt := range bucket.queue {
-		if evt.Start > tickNow { // scheduled for later
+	for i, task := range bucket.queue {
+		if task.Start > tickNow { // scheduled for later
 			bucket.queue[offset] = bucket.queue[i]
 			offset++
 			continue
 		}
 
 		// Process the task. If the task is recurrent, reschedule it
-		if evt.Task(timeNow); evt.Every != 0 {
-			s.schedule(evt.Task, tickNow+evt.Every, evt.Every)
+		if task.Task(timeNow); task.Every != 0 {
+			s.schedule(task.Task, tickNow+task.Every, task.Every)
 		}
 	}
 
