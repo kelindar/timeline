@@ -1,51 +1,89 @@
 package timeline
 
 import (
-	"github.com/kelindar/event"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
-/*
-func TestSchedule(t *testing.T) {
+func TestRunAt(t *testing.T) {
 	now := time.Unix(0, 0)
+	log := make(Log, 0, 8)
 
-	Schedule(MyEvent1{Text: "Immediate Event 1"}, now)
-	Schedule(MyEvent2{Text: "Immediate Event 2"}, now.Add(5*time.Millisecond))
-	Schedule(MyEvent1{Text: "Future Event 1"}, now.Add(495*time.Millisecond))
-	Schedule(MyEvent2{Text: "Future Event 2"}, now.Add(1600*time.Millisecond))
-
-	var wg sync.WaitGroup
-	wg.Add(4)
-
-	event.On(func(e MyEvent1) { wg.Done() })
-	event.On(func(e MyEvent2) { wg.Done() })
+	RunAt(log.Log("Next 1"), now)
+	RunAt(log.Log("Next 2"), now.Add(5*time.Millisecond))
+	RunAt(log.Log("Future 1"), now.Add(495*time.Millisecond))
+	RunAt(log.Log("Future 2"), now.Add(1600*time.Millisecond))
 
 	for ts := Tick(0); ts < 200; ts++ {
 		Default.Tick(ts)
 	}
 
-	wg.Wait()
-
-}*/
-
-// ------------------------------------- Test Events -------------------------------------
-
-const (
-	TypeEvent1 = 0x1
-	TypeEvent2 = 0x2
-)
-
-type MyEvent1 struct{ Text string }
-
-func (t MyEvent1) Type() uint32 { return TypeEvent1 }
-
-func (t MyEvent1) Execute() {
-	event.Emit(t)
+	assert.Equal(t, Log{
+		"Next 1",
+		"Next 2",
+		"Future 1",
+		"Future 2",
+	}, log)
 }
 
-type MyEvent2 struct{ Text string }
+func TestRunAfter(t *testing.T) {
+	log := make(Log, 0, 8)
 
-func (t MyEvent2) Type() uint32 { return TypeEvent2 }
+	RunAfter(log.Log("Next 1"), 0)
+	RunAfter(log.Log("Next 2"), 5*time.Millisecond)
+	RunAfter(log.Log("Future 1"), 495*time.Millisecond)
+	RunAfter(log.Log("Future 2"), 1600*time.Millisecond)
 
-func (t MyEvent2) Execute() {
-	event.Emit(t)
+	now := TickOf(time.Now())
+	for ts := now; ts < now+200; ts++ {
+		Default.Tick(ts)
+	}
+
+	assert.Equal(t, Log{
+		"Next 1",
+		"Next 2",
+		"Future 1",
+		"Future 2",
+	}, log)
+}
+
+func TestRunEveryAfter(t *testing.T) {
+	now := time.Unix(0, 0)
+	var count Counter
+
+	RunEveryAfter(count.Inc(), 10*time.Millisecond, now)
+	RunEveryAfter(count.Inc(), 30*time.Millisecond, now.Add(50*time.Millisecond))
+
+	for ts := Tick(0); ts < 10; ts++ {
+		Default.Tick(ts)
+	}
+
+	assert.Equal(t, Counter(12), count)
+}
+
+// ----------------------------------------- Log -----------------------------------------
+
+// Log is a simple task that appends a string to a slice.
+type Log []string
+
+// Log returns a task that appends a string to the log.
+func (l *Log) Log(s string) Task {
+	return func() bool {
+		*l = append(*l, s)
+		return true
+	}
+}
+
+// ----------------------------------------- Counter -----------------------------------------
+
+type Counter int64
+
+// Inc returns a task that increments the counter.
+func (c *Counter) Inc() Task {
+	return func() bool {
+		*c++
+		return true
+	}
 }
