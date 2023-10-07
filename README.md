@@ -73,26 +73,9 @@ Task executed at 22:13.000, elapsed=1s
 Task executed at 22:14.000, elapsed=1s
 ```
 
-## Benchmarks
+## Event Scheduling (Integration)
 
-| Type  | Input Size | Nanoseconds/Op | Million Run/Sec | Allocs/Op |
-| ----- | ---------- | -------------- | --------------- | --------- |
-| next  | 1          | 37.56          | 32.0 Million    | 0         |
-| next  | 10         | 191.8          | 62.83 Million   | 0         |
-| next  | 100        | 1746.0         | 68.57 Million   | 0         |
-| next  | 1000       | 17213.0        | 70.59 Million   | 0         |
-| next  | 10000      | 170543.0       | 69.66 Million   | 0         |
-| next  | 100000     | 2074903.0      | 51.4 Million    | 4         |
-| after | 1          | 38.53          | 31.17 Million   | 0         |
-| after | 10         | 198.9          | 60.45 Million   | 0         |
-| after | 100        | 1761.0         | 68.57 Million   | 0         |
-| after | 1000       | 23361.0        | 48.58 Million   | 0         |
-| after | 10000      | 730699.0       | 7.252 Million   | 0         |
-| after | 100000     | 3436339.0      | 0.06827 Million | 7         |
-
-## Event Package for Timeline
-
-The `event`` sub-package seamlessly integrates the timeline scheduler with event-driven programming. It allows you to emit and subscribe to events with precise timing, making it ideal for applications that require both event-driven architectures and time-based scheduling.
+The [github.com/kelindar/timeline/event](https://github.com/kelindar/timeline/tree/main/event) sub-package seamlessly integrates the timeline scheduler with event-driven programming. It allows you to emit and subscribe to events with precise timing, making it ideal for applications that require both event-driven architectures and time-based scheduling.
 
 ```go
 // Custom event type
@@ -125,3 +108,25 @@ func main() {
 	time.Sleep(5 * time.Second)
 }
 ```
+
+## Benchmarks
+
+The following benchmarks were ran on a 13th Gen Intel(R) Core(TM) i7-13700K. Two scenarios are compared
+
+1.  Immediate event scheduling (next tick)
+2.  Delayed event scheduling, bigger the batck farther the delay
+
+| Type  | Input Size | Nanoseconds/Op | Million Run/Sec | Allocs/Op |
+| ----- | ---------- | -------------- | --------------- | --------- |
+| next  | 1          | 37.56          | 32.0 Million    | 0         |
+| next  | 10         | 191.8          | 62.83 Million   | 0         |
+| next  | 100        | 1746.0         | 68.57 Million   | 0         |
+| next  | 1000       | 17213.0        | 70.59 Million   | 0         |
+| next  | 10000      | 170543.0       | 69.66 Million   | 0         |
+| next  | 100000     | 2074903.0      | 51.4 Million    | 4         |
+| after | 1          | 38.53          | 31.17 Million   | 0         |
+| after | 10         | 198.9          | 60.45 Million   | 0         |
+| after | 100        | 1761.0         | 68.57 Million   | 0         |
+| after | 1000       | 23361.0        | 48.58 Million   | 0         |
+| after | 10000      | 730699.0       | 7.252 Million   | 0         |
+| after | 100000     | 3436339.0      | 0.06827 Million | 7         |
