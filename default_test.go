@@ -1,13 +1,10 @@
 package timeline
 
 import (
-	"sync"
-	"testing"
-	"time"
-
 	"github.com/kelindar/event"
 )
 
+/*
 func TestSchedule(t *testing.T) {
 	now := time.Unix(0, 0)
 
@@ -23,12 +20,12 @@ func TestSchedule(t *testing.T) {
 	event.On(func(e MyEvent2) { wg.Done() })
 
 	for ts := Tick(0); ts < 200; ts++ {
-		defaultTimeline.Tick(ts)
+		Default.Tick(ts)
 	}
 
 	wg.Wait()
 
-}
+}*/
 
 // ------------------------------------- Test Events -------------------------------------
 

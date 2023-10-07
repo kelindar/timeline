@@ -10,28 +10,27 @@ const (
 	numBuckets = 100
 )
 
-// Event represents an event that can be scheduled.
-type Event interface {
-	Execute()
-}
+// Task represents a task that can be scheduled.
+type Task = func()
 
-type plan struct {
-	Event
+// job represents a scheduled task.
+type job struct {
+	Task
 	Time   Tick
 	Repeat Tick
-}
-
-// Timeline represents a timeline of events.
-type Timeline struct {
-	next    atomic.Int64 // next tick
-	buckets []*bucket
 }
 
 // bucket represents a bucket for a particular window of the second.
 // TODO: this could be optimized with double buffering to reduce locking.
 type bucket struct {
 	mu    sync.Mutex
-	queue []plan
+	queue []job
+}
+
+// Timeline represents a timeline of events.
+type Timeline struct {
+	next    atomic.Int64 // next tick
+	buckets []*bucket
 }
 
 // New creates a new timeline.
@@ -42,44 +41,45 @@ func New() *Timeline {
 
 	for i := 0; i < numBuckets; i++ {
 		tl.buckets[i] = &bucket{
-			queue: make([]plan, 0, 64),
+			queue: make([]job, 0, 64),
 		}
 	}
 
 	return tl
 }
 
-func (tl *Timeline) Delay(event Event, delay time.Duration) {
+// RunNext schedules a task to be processed during the next tick.
+func (tl *Timeline) RunNext(task Task) {
+	tl.schedule(task, Tick(tl.next.Load()), 0)
+}
+
+// RunAfter schedules a task to be processed after a given delay.
+func (tl *Timeline) RunAfter(task Task, delay time.Duration) {
 	// TODO: avoid using time.Now()
-	tl.schedule(event, TickOf(time.Now().Add(delay)), 0)
+	tl.schedule(task, TickOf(time.Now().Add(delay)), 0)
 }
 
-// ScheduleFunc schedules an event to be processed at a given time.
-func (tl *Timeline) Schedule(event Event, when time.Time) {
-	tl.schedule(event, TickOf(when), 0)
+// RunAt schedules a task to be processed at a given time.
+func (tl *Timeline) RunAt(task Task, when time.Time) {
+	tl.schedule(task, TickOf(when), 0)
 }
 
-// Repeat schedules an event to be processed at a given interval, starting
+// RunEvery schedules a task to be processed at a given interval, starting
 // immediately at the next tick.
-func (tl *Timeline) Repeat(event Event, interval time.Duration) {
-	tl.schedule(event, Tick(tl.next.Load()), durationOf(interval))
+func (tl *Timeline) RunEvery(task Task, interval time.Duration) {
+	tl.schedule(task, Tick(tl.next.Load()), durationOf(interval))
 }
 
-// Repeat schedules an event to be processed at a given interval, starting
-// at a given time.
-func (tl *Timeline) RepeatAfter(event Event, interval time.Duration, startTime time.Time) {
-	tl.schedule(event, TickOf(startTime), durationOf(interval))
-}
-
-// Next schedules an event to be processed during the next tick.
-func (tl *Timeline) Next(event Event) {
-	tl.schedule(event, Tick(tl.next.Load()), 0)
+// RunEveryAfter schedules a task to be processed at a given interval,
+// starting at a given time.
+func (tl *Timeline) RunEveryAfter(task Task, interval time.Duration, startTime time.Time) {
+	tl.schedule(task, TickOf(startTime), durationOf(interval))
 }
 
 // ScheduleFunc schedules an event to be processed at a given time.
-func (tl *Timeline) schedule(event Event, when, repeat Tick) {
-	evt := plan{
-		Event:  event,
+func (tl *Timeline) schedule(event Task, when, repeat Tick) {
+	evt := job{
+		Task:   event,
 		Time:   when,
 		Repeat: repeat,
 	}
@@ -109,7 +109,7 @@ func (tl *Timeline) Tick(now Tick) {
 		}
 
 		// Process the event
-		evt.Execute()
+		evt.Task()
 
 		// If the event has a non-zero interval, update its execution time
 		if evt.Repeat != 0 {

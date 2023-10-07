@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+var counter atomic.Uint64
+
 /*
 cpu: 13th Gen Intel(R) Core(TM) i7-13700K
 BenchmarkEvent/batch/1-24         	33334166	        35.35 ns/op	        33.33 million/op	       0 B/op	       0 allocs/op
@@ -26,22 +28,16 @@ func BenchmarkEvent(b *testing.B) {
 			for n := 0; n < b.N; n++ {
 				for i := 0; i < size; i++ {
 					when := now.Add(time.Duration(100*i) * time.Millisecond)
-					Schedule(CountEvent{}, when)
+					//Schedule(CountEvent{}, when)
+					Default.RunAt(func() {
+						counter.Add(1)
+					}, when)
 				}
 
-				defaultTimeline.Tick(Tick(n))
+				Default.Tick(Tick(n))
 			}
 
 			b.ReportMetric(float64(counter.Load())/1000000, "million/op")
 		})
 	}
-}
-
-var counter atomic.Uint64
-
-type CountEvent struct {
-}
-
-func (t CountEvent) Execute() {
-	counter.Add(1)
 }
