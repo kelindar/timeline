@@ -12,8 +12,12 @@ const (
 	numBuckets = int(1 * time.Second / resolution)
 )
 
-// Task represents a task that can be scheduled.
-type Task = func(time.Time) bool
+// Task defines a scheduled function. 'now' is the execution time, and 'elapsed'
+// indicates the time since the last schedule or execution.  The return value of
+// the function is a boolean. If the task returns 'true', it indicates that the
+// task should continue to be scheduled for future execution based on its
+// interval. Returning 'false' implies that the task should not be executed again.
+type Task = func(now time.Time, elapsed time.Duration) bool
 
 // job represents a scheduled task.
 type job struct {
@@ -29,13 +33,13 @@ type bucket struct {
 	queue []job
 }
 
-// Scheduler represents a task scheduler.
+// Scheduler manages and executes scheduled tasks.
 type Scheduler struct {
 	next    atomic.Int64 // next tick
 	buckets []*bucket
 }
 
-// New creates a new scheduler.
+// New initializes and returns a new Scheduler.
 func New() *Scheduler {
 	s := &Scheduler{
 		buckets: make([]*bucket, numBuckets),
@@ -50,35 +54,32 @@ func New() *Scheduler {
 	return s
 }
 
-// Run schedules a task to be processed during the next tick.
+// Run schedules a task for the next tick.
 func (s *Scheduler) Run(task Task) {
 	s.schedule(task, tick(s.next.Load()), 0)
 }
 
-// RunAt schedules a task to be processed at a given time.
+// RunAt schedules a task for a specific 'when' time.
 func (s *Scheduler) RunAt(task Task, when time.Time) {
 	s.schedule(task, tickOf(when), 0)
 }
 
-// RunAfter schedules a task to be processed after a given delay.
+// RunAfter schedules a task to run after a 'delay'.
 func (s *Scheduler) RunAfter(task Task, delay time.Duration) {
 	s.schedule(task, tick(s.next.Load())+durationOf(delay), 0)
 }
 
-// RunEvery schedules a task to be processed at a given interval, starting
-// immediately at the next tick.
+// RunEvery schedules a task to run at 'interval' intervals, starting immediately.
 func (s *Scheduler) RunEvery(task Task, interval time.Duration) {
 	s.schedule(task, tick(s.next.Load()), durationOf(interval))
 }
 
-// RunEveryAt schedules a task to be processed at a given interval,
-// starting at a given time.
+// RunEveryAt schedules a task to run at 'interval' intervals, starting at 'startTime'.
 func (s *Scheduler) RunEveryAt(task Task, interval time.Duration, startTime time.Time) {
 	s.schedule(task, tickOf(startTime), durationOf(interval))
 }
 
-// RunEveryAfter schedules a task to be processed at a given interval,
-// starting after a given delay.
+// RunEveryAfter schedules a task to run at 'interval' intervals after a 'delay'.
 func (s *Scheduler) RunEveryAfter(task Task, interval, delay time.Duration) {
 	s.schedule(task, tick(s.next.Load())+durationOf(delay), durationOf(interval))
 }
@@ -103,8 +104,7 @@ func (s *Scheduler) Seek(t time.Time) {
 	s.next.Store(int64(tickOf(t)))
 }
 
-// Tick advances the scheduler to the next tick, processing all events
-// and returning the current clock time.
+// Tick processes tasks for the current time and advances the internal clock.
 func (s *Scheduler) Tick() time.Time {
 	tickNow := tick(s.next.Add(1) - 1)
 	timeNow := tickNow.Time()
@@ -122,7 +122,8 @@ func (s *Scheduler) Tick() time.Time {
 		}
 
 		// Process the task. If the task is recurrent, reschedule it
-		if task.Task(timeNow); task.Every != 0 {
+		elapsed := tickNow - task.Start
+		if task.Task(timeNow, elapsed.Duration()); task.Every != 0 {
 			s.schedule(task.Task, tickNow+task.Every, task.Every)
 		}
 	}
@@ -140,7 +141,8 @@ func (s *Scheduler) bucketOf(when tick) *bucket {
 
 // ----------------------------------------- Clock -----------------------------------------
 
-// Start starts the scheduler internal clock.
+// Start begins the scheduler's internal clock, aligning with the specified
+// 'interval'. It returns a cancel function to stop the clock.
 func (s *Scheduler) Start(ctx context.Context) context.CancelFunc {
 	interval := resolution
 	ctx, cancel := context.WithCancel(ctx)
@@ -176,9 +178,14 @@ func (s *Scheduler) Start(ctx context.Context) context.CancelFunc {
 // tick represents a point in time, rounded up to the resolution of the clock.
 type tick int64
 
-// Time returns the time of the tick.
+// Time converts the tick to a timestamp.
 func (t tick) Time() time.Time {
 	return time.Unix(0, int64(t)*int64(resolution))
+}
+
+// Duration converts the tick to a duration.
+func (t tick) Duration() time.Duration {
+	return time.Duration(t) * resolution
 }
 
 // tickOf returns the time rounded up to the resolution of the clock.

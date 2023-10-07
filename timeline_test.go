@@ -14,28 +14,48 @@ var counter atomic.Uint64
 
 /*
 cpu: 13th Gen Intel(R) Core(TM) i7-13700K
-BenchmarkEvent/batch/1-24         	32432432	        37.19 ns/op	        32.43 million/op	       0 B/op	       0 allocs/op
-BenchmarkEvent/batch/10-24        	 6434312	       187.0 ns/op	        64.34 million/op	       0 B/op	       0 allocs/op
-BenchmarkEvent/batch/100-24       	  571430	      2041 ns/op	        57.09 million/op	       7 B/op	       0 allocs/op
-BenchmarkEvent/batch/1000-24      	   13340	     92729 ns/op	         8.345 million/op	   51714 B/op	       0 allocs/op
+BenchmarkRun/next/10-24         	 6521738	       184.8 ns/op	        65.22 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/next/1000-24       	   72289	     15901 ns/op	        72.29 million/op	     103 B/op	       0 allocs/op
+BenchmarkRun/next/100000-24     	     530	   1955661 ns/op	        53.00 million/op	 2655640 B/op	       4 allocs/op
+BenchmarkRun/after/10-24        	 6400060	       188.4 ns/op	        64.00 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/after/100-24       	  705890	      1664 ns/op	        70.58 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/after/10000-24     	    3037	    611623 ns/op	         4.613 million/op	 1166928 B/op	       0 allocs/op
 */
-func BenchmarkEvent(b *testing.B) {
-	for _, size := range []int{1, 10, 100, 1000} {
-		b.Run(fmt.Sprintf("batch/%d", size), func(b *testing.B) {
+func BenchmarkRun(b *testing.B) {
+	work := func(time.Time, time.Duration) bool {
+		counter.Add(1)
+		return true
+	}
+
+	for _, size := range []int{10, 1000, 100000} {
+		b.Run(fmt.Sprintf("next/%d", size), func(b *testing.B) {
 			counter.Store(0)
 			s := New()
-
 			b.ReportAllocs()
 			b.ResetTimer()
 
 			for n := 0; n < b.N; n++ {
 				for i := 0; i < size; i++ {
-					s.RunAfter(func(time.Time) bool {
-						counter.Add(1)
-						return true
-					}, time.Duration(100*i)*time.Millisecond)
+					s.Run(work)
 				}
+				s.Tick()
+			}
 
+			b.ReportMetric(float64(counter.Load())/1000000, "million/op")
+		})
+	}
+
+	for _, size := range []int{10, 100, 10000} {
+		b.Run(fmt.Sprintf("after/%d", size), func(b *testing.B) {
+			counter.Store(0)
+			s := New()
+			b.ReportAllocs()
+			b.ResetTimer()
+
+			for n := 0; n < b.N; n++ {
+				for i := 0; i < size; i++ {
+					s.RunAfter(work, time.Duration(10*i)*time.Millisecond)
+				}
 				s.Tick()
 			}
 
@@ -184,7 +204,7 @@ type Log []string
 
 // Log returns a task that appends a string to the log.
 func (l *Log) Log(s string) Task {
-	return func(time.Time) bool {
+	return func(time.Time, time.Duration) bool {
 		*l = append(*l, s)
 		return true
 	}
@@ -196,7 +216,7 @@ type Counter int64
 
 // Inc returns a task that increments the counter.
 func (c *Counter) Inc() Task {
-	return func(time.Time) bool {
+	return func(time.Time, time.Duration) bool {
 		atomic.AddInt64((*int64)(c), 1)
 		return true
 	}
