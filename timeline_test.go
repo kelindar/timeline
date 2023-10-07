@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -14,12 +15,12 @@ var counter atomic.Uint64
 
 /*
 cpu: 13th Gen Intel(R) Core(TM) i7-13700K
-BenchmarkRun/next/10-24         	 5896788	       191.4 ns/op	        58.97 million/op	       0 B/op	       0 allocs/op
-BenchmarkRun/next/1000-24       	   69766	     17043 ns/op	        69.77 million/op	     138 B/op	       0 allocs/op
-BenchmarkRun/next/100000-24     	     475	   2181049 ns/op	        47.50 million/op	 3452416 B/op	       4 allocs/op
-BenchmarkRun/after/10-24        	 6060606	       197.4 ns/op	        60.61 million/op	       0 B/op	       0 allocs/op
-BenchmarkRun/after/100-24       	  685722	      1770 ns/op	        68.57 million/op	       0 B/op	       0 allocs/op
-BenchmarkRun/after/10000-24     	    4285	    880513 ns/op	         9.183 million/op	 1516396 B/op	       0 allocs/op
+BenchmarkRun/next/10-24         	 6315861	       190.6 ns/op	        63.16 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/next/1000-24       	   70174	     17001 ns/op	        70.17 million/op	     106 B/op	       0 allocs/op
+BenchmarkRun/next/100000-24     	     510	   2063725 ns/op	        51.00 million/op	 2759780 B/op	       4 allocs/op
+BenchmarkRun/after/10-24        	 6045342	       197.3 ns/op	        60.45 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/after/100-24       	  685722	      1759 ns/op	        68.57 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/after/10000-24     	    3705	    693253 ns/op	         6.865 million/op	 1127870 B/op	       0 allocs/op
 */
 func BenchmarkRun(b *testing.B) {
 	work := func(time.Time, time.Duration) bool {
@@ -150,7 +151,7 @@ func TestRunEvery(t *testing.T) {
 		s.Tick()
 	}
 
-	assert.Equal(t, 14, count.Value())
+	assert.Equal(t, 12, count.Value())
 }
 
 func TestRun(t *testing.T) {
@@ -195,6 +196,11 @@ func TestStart(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 	assert.Equal(t, 3, count.Value())
+}
+
+func TestJobSize(t *testing.T) {
+	size := unsafe.Sizeof(job{})
+	assert.Equal(t, 24, int(size))
 }
 
 // ----------------------------------------- Log -----------------------------------------

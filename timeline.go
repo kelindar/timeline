@@ -22,9 +22,9 @@ type Task = func(now time.Time, elapsed time.Duration) bool
 // job represents a scheduled task.
 type job struct {
 	Task
-	Start tick // When the task was scheduled
 	RunAt tick // When the task should run
-	Every tick // (optional) How often the task should run (0 = once)
+	Since span // Elapsed ticks between scheduled time and starting time
+	Every span // (optional) In ticks, how often the task should run (0 = once)
 }
 
 // bucket represents a bucket for a particular window of the second.
@@ -67,7 +67,7 @@ func (s *Scheduler) RunAt(task Task, when time.Time) {
 
 // RunAfter schedules a task to run after a 'delay'.
 func (s *Scheduler) RunAfter(task Task, delay time.Duration) {
-	s.schedule(task, s.now()+durationOf(delay), 0)
+	s.schedule(task, s.after(delay), 0)
 }
 
 // RunEvery schedules a task to run at 'interval' intervals, starting at the next boundary tick.
@@ -82,15 +82,15 @@ func (s *Scheduler) RunEveryAt(task Task, interval time.Duration, startTime time
 
 // RunEveryAfter schedules a task to run at 'interval' intervals after a 'delay'.
 func (s *Scheduler) RunEveryAfter(task Task, interval, delay time.Duration) {
-	s.schedule(task, s.now()+durationOf(delay), durationOf(interval))
+	s.schedule(task, s.after(delay), durationOf(interval))
 }
 
 // ScheduleFunc schedules an event to be processed at a given time.
-func (s *Scheduler) schedule(event Task, when, repeat tick) {
+func (s *Scheduler) schedule(event Task, when tick, repeat span) {
 	evt := job{
 		Task:  event,
-		Start: s.now(),
 		RunAt: when,
+		Since: span(when - s.now()),
 		Every: repeat,
 	}
 
@@ -124,15 +124,14 @@ func (s *Scheduler) Tick() time.Time {
 		}
 
 		// Process the task
-		elapsed := tickNow - task.Start
-		repeat := task.Task(timeNow, elapsed.Duration())
+		repeat := task.Task(timeNow, task.Since.Duration())
 
 		// If the task is recurrent, determine how to reschedule it
 		if repeat && task.Every != 0 {
-			nextTick := tickNow + task.Every
+			nextTick := tickNow + tick(task.Every)
 			switch {
 			case s.bucketOf(nextTick) == s.bucketOf(tickNow):
-				task.Start = tickNow
+				task.Since = span(nextTick - tickNow)
 				task.RunAt = nextTick
 				bucket.queue[offset] = task
 				offset++
@@ -160,10 +159,15 @@ func (s *Scheduler) now() tick {
 	return tick(s.next.Load())
 }
 
+// after calculates the next tick after the specified duration.
+func (s *Scheduler) after(dt time.Duration) tick {
+	return s.now() + tick(durationOf(dt))
+}
+
 // alignedAt calculates the next tick boundary based on the current tick and the desired interval.
 func (s *Scheduler) alignedAt(i time.Duration) tick {
 	current := s.now()
-	interval := durationOf(i)
+	interval := tick(durationOf(i))
 	return current + interval - current%interval
 }
 
@@ -199,7 +203,7 @@ func (s *Scheduler) Start(ctx context.Context) context.CancelFunc {
 	return cancel
 }
 
-// ----------------------------------------- Tick -----------------------------------------
+// ----------------------------------------- Time (in ticks) -----------------------------------------
 
 // tick represents a point in time, rounded up to the resolution of the clock.
 type tick int64
@@ -209,17 +213,22 @@ func (t tick) Time() time.Time {
 	return time.Unix(0, int64(t)*int64(resolution))
 }
 
-// Duration converts the tick to a duration.
-func (t tick) Duration() time.Duration {
-	return time.Duration(t) * resolution
-}
-
 // tickOf returns the time rounded up to the resolution of the clock.
 func tickOf(t time.Time) tick {
 	return tick(t.UnixNano() / int64(resolution))
 }
 
+// ----------------------------------------- Duration (in ticks) -----------------------------------------
+
+// span represents a time span (duration) in ticks
+type span uint32
+
+// Duration converts the span to a duration.
+func (s span) Duration() time.Duration {
+	return time.Duration(s) * resolution
+}
+
 // durationOf computes a duration in terms of ticks.
-func durationOf(t time.Duration) tick {
-	return tick(t / resolution)
+func durationOf(t time.Duration) span {
+	return span(t / resolution)
 }
