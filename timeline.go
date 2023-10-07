@@ -63,9 +63,9 @@ func (s *Scheduler) Run(task Task) {
 	s.schedule(task, s.now(), 0)
 }
 
-// RunAt schedules a task for a specific 'when' time.
-func (s *Scheduler) RunAt(task Task, when time.Time) {
-	s.schedule(task, tickOf(when), 0)
+// RunAt schedules a task for a specific 'at' time.
+func (s *Scheduler) RunAt(task Task, at time.Time) {
+	s.schedule(task, tickOf(at), 0)
 }
 
 // RunAfter schedules a task to run after a 'delay'.
