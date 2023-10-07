@@ -22,9 +22,9 @@ type Task = func(now time.Time, elapsed time.Duration) bool
 // job represents a scheduled task.
 type job struct {
 	Task
-	Start tick
-	RunAt tick
-	Every tick
+	Start tick // When the task was scheduled
+	RunAt tick // When the task should run
+	Every tick // (optional) How often the task should run (0 = once)
 }
 
 // bucket represents a bucket for a particular window of the second.
@@ -57,7 +57,7 @@ func New() *Scheduler {
 
 // Run schedules a task for the next tick.
 func (s *Scheduler) Run(task Task) {
-	s.schedule(task, tick(s.next.Load()), 0)
+	s.schedule(task, s.now(), 0)
 }
 
 // RunAt schedules a task for a specific 'when' time.
@@ -67,28 +67,12 @@ func (s *Scheduler) RunAt(task Task, when time.Time) {
 
 // RunAfter schedules a task to run after a 'delay'.
 func (s *Scheduler) RunAfter(task Task, delay time.Duration) {
-	s.schedule(task, tick(s.next.Load())+durationOf(delay), 0)
+	s.schedule(task, s.now()+durationOf(delay), 0)
 }
-
-// RunEvery schedules a task to run at 'interval' intervals, starting immediately.
-/*func (s *Scheduler) RunEvery(task Task, interval time.Duration) {
-	s.schedule(task, tick(s.next.Load()), durationOf(interval))
-}*/
 
 // RunEvery schedules a task to run at 'interval' intervals, starting at the next boundary tick.
 func (s *Scheduler) RunEvery(task Task, interval time.Duration) {
-	// Calculate the current tick
-	currentTick := tick(s.next.Load())
-
-	// Calculate ticks for the provided interval
-	intervalTicks := durationOf(interval)
-
-	// Compute the next boundary tick
-	remainder := currentTick % intervalTicks
-	nextBoundaryTick := currentTick + intervalTicks - remainder
-
-	// Schedule the task to start at the next boundary tick and repeat at the given interval
-	s.schedule(task, nextBoundaryTick, intervalTicks)
+	s.schedule(task, s.alignedAt(interval), durationOf(interval))
 }
 
 // RunEveryAt schedules a task to run at 'interval' intervals, starting at 'startTime'.
@@ -98,14 +82,14 @@ func (s *Scheduler) RunEveryAt(task Task, interval time.Duration, startTime time
 
 // RunEveryAfter schedules a task to run at 'interval' intervals after a 'delay'.
 func (s *Scheduler) RunEveryAfter(task Task, interval, delay time.Duration) {
-	s.schedule(task, tick(s.next.Load())+durationOf(delay), durationOf(interval))
+	s.schedule(task, s.now()+durationOf(delay), durationOf(interval))
 }
 
 // ScheduleFunc schedules an event to be processed at a given time.
 func (s *Scheduler) schedule(event Task, when, repeat tick) {
 	evt := job{
 		Task:  event,
-		Start: tick(s.next.Load()),
+		Start: s.now(),
 		RunAt: when,
 		Every: repeat,
 	}
@@ -170,6 +154,18 @@ func (s *Scheduler) bucketOf(when tick) *bucket {
 }
 
 // ----------------------------------------- Clock -----------------------------------------
+
+// now returns the current tick.
+func (s *Scheduler) now() tick {
+	return tick(s.next.Load())
+}
+
+// alignedAt calculates the next tick boundary based on the current tick and the desired interval.
+func (s *Scheduler) alignedAt(i time.Duration) tick {
+	current := s.now()
+	interval := durationOf(i)
+	return current + interval - current%interval
+}
 
 // Start begins the scheduler's internal clock, aligning with the specified
 // 'interval'. It returns a cancel function to stop the clock.

@@ -14,12 +14,12 @@ var counter atomic.Uint64
 
 /*
 cpu: 13th Gen Intel(R) Core(TM) i7-13700K
-BenchmarkRun/next/10-24         	 6521738	       184.8 ns/op	        65.22 million/op	       0 B/op	       0 allocs/op
-BenchmarkRun/next/1000-24       	   72289	     15901 ns/op	        72.29 million/op	     103 B/op	       0 allocs/op
-BenchmarkRun/next/100000-24     	     530	   1955661 ns/op	        53.00 million/op	 2655640 B/op	       4 allocs/op
-BenchmarkRun/after/10-24        	 6400060	       188.4 ns/op	        64.00 million/op	       0 B/op	       0 allocs/op
-BenchmarkRun/after/100-24       	  705890	      1664 ns/op	        70.58 million/op	       0 B/op	       0 allocs/op
-BenchmarkRun/after/10000-24     	    3037	    611623 ns/op	         4.613 million/op	 1166928 B/op	       0 allocs/op
+BenchmarkRun/next/10-24         	 5896788	       191.4 ns/op	        58.97 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/next/1000-24       	   69766	     17043 ns/op	        69.77 million/op	     138 B/op	       0 allocs/op
+BenchmarkRun/next/100000-24     	     475	   2181049 ns/op	        47.50 million/op	 3452416 B/op	       4 allocs/op
+BenchmarkRun/after/10-24        	 6060606	       197.4 ns/op	        60.61 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/after/100-24       	  685722	      1770 ns/op	        68.57 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/after/10000-24     	    4285	    880513 ns/op	         9.183 million/op	 1516396 B/op	       0 allocs/op
 */
 func BenchmarkRun(b *testing.B) {
 	work := func(time.Time, time.Duration) bool {
