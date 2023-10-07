@@ -9,10 +9,10 @@ import (
 
 /*
 cpu: 13th Gen Intel(R) Core(TM) i7-13700K
-BenchmarkEvent/batch/1-24         	35294739	        34.28 ns/op	        35.29 million/op	       0 B/op	       0 allocs/op
-BenchmarkEvent/batch/10-24        	 5882352	       206.5 ns/op	        58.82 million/op	       0 B/op	       0 allocs/op
-BenchmarkEvent/batch/100-24       	  600008	      1942 ns/op	        60.00 million/op	       0 B/op	       0 allocs/op
-BenchmarkEvent/batch/1000-24      	   44310	     25773 ns/op	        44.31 million/op	       0 B/op	       0 allocs/op
+BenchmarkEvent/batch/1-24         	33334166	        35.35 ns/op	        33.33 million/op	       0 B/op	       0 allocs/op
+BenchmarkEvent/batch/10-24        	 5529952	       220.0 ns/op	        55.30 million/op	       0 B/op	       0 allocs/op
+BenchmarkEvent/batch/100-24       	  558123	      2044 ns/op	        55.81 million/op	       0 B/op	       0 allocs/op
+BenchmarkEvent/batch/1000-24      	   35406	     31209 ns/op	        35.41 million/op	       0 B/op	       0 allocs/op
 */
 func BenchmarkEvent(b *testing.B) {
 	for _, size := range []int{1, 10, 100, 1000} {

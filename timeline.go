@@ -17,7 +17,8 @@ type Event interface {
 
 type plan struct {
 	Event
-	Time Tick
+	Time   Tick
+	Repeat Tick
 }
 
 // Timeline represents a timeline of events.
@@ -48,21 +49,39 @@ func New() *Timeline {
 	return tl
 }
 
+func (tl *Timeline) Delay(event Event, delay time.Duration) {
+	// TODO: avoid using time.Now()
+	tl.schedule(event, TickOf(time.Now().Add(delay)), 0)
+}
+
 // ScheduleFunc schedules an event to be processed at a given time.
 func (tl *Timeline) Schedule(event Event, when time.Time) {
-	tl.schedule(event, TickOf(when))
+	tl.schedule(event, TickOf(when), 0)
+}
+
+// Repeat schedules an event to be processed at a given interval, starting
+// immediately at the next tick.
+func (tl *Timeline) Repeat(event Event, interval time.Duration) {
+	tl.schedule(event, Tick(tl.next.Load()), durationOf(interval))
+}
+
+// Repeat schedules an event to be processed at a given interval, starting
+// at a given time.
+func (tl *Timeline) RepeatAfter(event Event, interval time.Duration, startTime time.Time) {
+	tl.schedule(event, TickOf(startTime), durationOf(interval))
 }
 
 // Next schedules an event to be processed during the next tick.
 func (tl *Timeline) Next(event Event) {
-	tl.schedule(event, Tick(tl.next.Load()))
+	tl.schedule(event, Tick(tl.next.Load()), 0)
 }
 
 // ScheduleFunc schedules an event to be processed at a given time.
-func (tl *Timeline) schedule(event Event, when Tick) {
+func (tl *Timeline) schedule(event Event, when, repeat Tick) {
 	evt := plan{
-		Time:  when,
-		Event: event,
+		Event:  event,
+		Time:   when,
+		Repeat: repeat,
 	}
 
 	bucket := tl.bucketOf(evt.Time)
@@ -91,6 +110,13 @@ func (tl *Timeline) Tick(now Tick) {
 
 		// Process the event
 		evt.Execute()
+
+		// If the event has a non-zero interval, update its execution time
+		if evt.Repeat != 0 {
+			evt.Time = now + evt.Repeat
+			bucket.queue[offset] = evt
+			offset++
+		}
 	}
 
 	// Truncate the current bucket to remove processed events
@@ -101,4 +127,9 @@ func (tl *Timeline) Tick(now Tick) {
 func (tl *Timeline) bucketOf(when Tick) *bucket {
 	idx := int(when) % numBuckets
 	return tl.buckets[idx]
+}
+
+// durationOf computes a duration in terms of ticks.
+func durationOf(t time.Duration) Tick {
+	return Tick(t / resolution)
 }

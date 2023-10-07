@@ -50,6 +50,11 @@ func TickOf(t time.Time) Tick {
 	return Tick(t.UnixNano() / int64(resolution))
 }
 
+// Time returns the time of the tick.
+func (t Tick) Time() time.Time {
+	return time.Unix(0, int64(t)*int64(resolution))
+}
+
 /*
 
 func main() {
