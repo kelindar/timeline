@@ -12,15 +12,11 @@
 
 This library provides a simple and efficient way to schedule and manage tasks based on time. It offers a fine-grained resolution of 10 milliseconds and uses a bucketing system to efficiently manage scheduled tasks. The library is designed to be thread-safe and can handle concurrent scheduling and execution of tasks.
 
-## Features
-
-When considering the integration of the Timeline library into your project, it's essential to weigh its advantages and potential limitations. Here's a breakdown to help you make an informed decision:
-
 ### Advantages
 
-1. **High Performance**: Timeline is optimized for speed, handling a large number of tasks with minimal overhead. For instance, it's ideal for real-time game servers where tasks like player movements or AI decisions need frequent scheduling.
+1. **High Performance**: This library is optimized for speed, handling a large number of tasks with minimal overhead. For instance, it's ideal for real-time game servers where tasks like player movements or AI decisions need frequent scheduling.
 
-2. **Fine-grained Resolution**: With its 10ms resolution, Timeline offers precise scheduling. This precision is crucial for applications like high-frequency trading platforms.
+2. **Fine-grained Resolution**: With its 10ms resolution, this package offers precise scheduling. This resolution is useful for applications where tasks need to be scheduled at a high frequency.
 
 3. **Efficient Memory Management**: The library's bucketing system ensures linear and predictable memory consumption. This efficiency is beneficial in cloud environments where memory usage impacts costs.
 
@@ -28,7 +24,7 @@ When considering the integration of the Timeline library into your project, it's
 
 ### Disadvantages
 
-1. **Not Suitable for Long-term Scheduling**: Timeline is optimized for short-term tasks. It's not intended for tasks scheduled days or weeks in advance, making it less ideal for applications like calendar reminders.
+1. **Not Suitable for Long-term Scheduling**: This library is optimized for short-term tasks. It's not intended for tasks scheduled days or weeks in advance, making it less ideal for applications like calendar reminders.
 
 2. **Requires Active Ticking**: The library needs active ticking (via the Tick method) to process tasks. This design might not be suitable for scenarios with sporadic task scheduling.
 
