@@ -55,8 +55,7 @@ func (s *Scheduler) RunNext(task Task) {
 
 // RunAfter schedules a task to be processed after a given delay.
 func (s *Scheduler) RunAfter(task Task, delay time.Duration) {
-	// TODO: avoid using time.Now()
-	s.schedule(task, TickOf(time.Now().Add(delay)), 0)
+	s.schedule(task, Tick(s.next.Load())+durationOf(delay), 0)
 }
 
 // RunAt schedules a task to be processed at a given time.
@@ -70,10 +69,16 @@ func (s *Scheduler) RunEvery(task Task, interval time.Duration) {
 	s.schedule(task, Tick(s.next.Load()), durationOf(interval))
 }
 
-// RunEveryAfter schedules a task to be processed at a given interval,
+// RunEveryAt schedules a task to be processed at a given interval,
 // starting at a given time.
-func (s *Scheduler) RunEveryAfter(task Task, interval time.Duration, startTime time.Time) {
+func (s *Scheduler) RunEveryAt(task Task, interval time.Duration, startTime time.Time) {
 	s.schedule(task, TickOf(startTime), durationOf(interval))
+}
+
+// RunEveryAfter schedules a task to be processed at a given interval,
+// starting after a given delay.
+func (s *Scheduler) RunEveryAfter(task Task, interval, delay time.Duration) {
+	s.schedule(task, Tick(s.next.Load())+durationOf(delay), durationOf(interval))
 }
 
 // ScheduleFunc schedules an event to be processed at a given time.
@@ -91,10 +96,15 @@ func (s *Scheduler) schedule(event Task, when, repeat Tick) {
 	bucket.mu.Unlock()
 }
 
-// Tick processes all events that are due for processing at the given time.
-func (s *Scheduler) Tick(now Tick) {
-	s.next.Store(int64(now) + 1)
+// Seek advances the scheduler to a given time.
+func (s *Scheduler) Seek(t time.Time) {
+	s.next.Store(int64(TickOf(t)))
+}
 
+// Tick advances the scheduler to the next tick, processing all events
+// and returning the current clock time.
+func (s *Scheduler) Tick() time.Time {
+	now := Tick(s.next.Add(1) - 1)
 	bucket := s.bucketOf(now)
 	offset := 0
 
@@ -108,17 +118,15 @@ func (s *Scheduler) Tick(now Tick) {
 			continue
 		}
 
-		// Process the event
-		evt.Task()
-
-		// If the event has a non-zero interval, update its execution time
-		if evt.Every != 0 {
+		// Process the task. If the task is recurrent, reschedule it
+		if evt.Task(); evt.Every != 0 {
 			s.schedule(evt.Task, now+evt.Every, evt.Every)
 		}
 	}
 
 	// Truncate the current bucket to remove processed events
 	bucket.queue = bucket.queue[:offset]
+	return now.Time()
 }
 
 // bucketOf returns the bucket index for a given tick.

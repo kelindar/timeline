@@ -28,8 +28,8 @@ func RunEvery(task Task, interval time.Duration) {
 	Default.RunEvery(task, interval)
 }
 
-// RunEveryAfter schedules a task to be processed at a given interval,
+// RunEveryAt schedules a task to be processed at a given interval,
 // starting at a given time.
-func RunEveryAfter(task Task, interval time.Duration, startTime time.Time) {
-	Default.RunEveryAfter(task, interval, startTime)
+func RunEveryAt(task Task, interval time.Duration, startTime time.Time) {
+	Default.RunEveryAt(task, interval, startTime)
 }

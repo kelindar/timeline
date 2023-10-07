@@ -19,8 +19,10 @@ BenchmarkEvent/batch/1000-24      	   43273	     26310 ns/op	        43.27 milli
 func BenchmarkEvent(b *testing.B) {
 	for _, size := range []int{1, 10, 100, 1000} {
 		b.Run(fmt.Sprintf("batch/%d", size), func(b *testing.B) {
+
 			counter.Store(0)
-			now := time.Unix(0, 0)
+			//now := time.Unix(0, 0)
+			now := time.Now()
 
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -28,14 +30,14 @@ func BenchmarkEvent(b *testing.B) {
 			for n := 0; n < b.N; n++ {
 				for i := 0; i < size; i++ {
 					when := now.Add(time.Duration(100*i) * time.Millisecond)
-					//Schedule(CountEvent{}, when)
+
 					Default.RunAt(func() bool {
 						counter.Add(1)
 						return true
 					}, when)
 				}
 
-				Default.Tick(Tick(n))
+				Default.Tick()
 			}
 
 			b.ReportMetric(float64(counter.Load())/1000000, "million/op")

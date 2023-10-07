@@ -7,17 +7,24 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func newScheduler(now time.Time) *Scheduler {
+	s := New()
+	s.Seek(now)
+	return s
+}
+
 func TestRunAt(t *testing.T) {
 	now := time.Unix(0, 0)
 	log := make(Log, 0, 8)
 
-	RunAt(log.Log("Next 1"), now)
-	RunAt(log.Log("Next 2"), now.Add(5*time.Millisecond))
-	RunAt(log.Log("Future 1"), now.Add(495*time.Millisecond))
-	RunAt(log.Log("Future 2"), now.Add(1600*time.Millisecond))
+	s := newScheduler(now)
+	s.RunAt(log.Log("Next 1"), now)
+	s.RunAt(log.Log("Next 2"), now.Add(5*time.Millisecond))
+	s.RunAt(log.Log("Future 1"), now.Add(495*time.Millisecond))
+	s.RunAt(log.Log("Future 2"), now.Add(1600*time.Millisecond))
 
-	for ts := Tick(0); ts < 200; ts++ {
-		Default.Tick(ts)
+	for i := 0; i < 200; i++ {
+		s.Tick()
 	}
 
 	assert.Equal(t, Log{
@@ -29,16 +36,17 @@ func TestRunAt(t *testing.T) {
 }
 
 func TestRunAfter(t *testing.T) {
+	now := time.Unix(0, 0)
 	log := make(Log, 0, 8)
 
-	RunAfter(log.Log("Next 1"), 0)
-	RunAfter(log.Log("Next 2"), 5*time.Millisecond)
-	RunAfter(log.Log("Future 1"), 495*time.Millisecond)
-	RunAfter(log.Log("Future 2"), 1600*time.Millisecond)
+	s := newScheduler(now)
+	s.RunAfter(log.Log("Next 1"), 0)
+	s.RunAfter(log.Log("Next 2"), 5*time.Millisecond)
+	s.RunAfter(log.Log("Future 1"), 495*time.Millisecond)
+	s.RunAfter(log.Log("Future 2"), 1600*time.Millisecond)
 
-	now := TickOf(time.Now())
-	for ts := now; ts < now+200; ts++ {
-		Default.Tick(ts)
+	for i := 0; i < 200; i++ {
+		s.Tick()
 	}
 
 	assert.Equal(t, Log{
@@ -49,15 +57,16 @@ func TestRunAfter(t *testing.T) {
 	}, log)
 }
 
-func TestRunEveryAfter(t *testing.T) {
+func TestRunEveryAt(t *testing.T) {
 	now := time.Unix(0, 0)
 	var count Counter
 
-	RunEveryAfter(count.Inc(), 10*time.Millisecond, now)
-	RunEveryAfter(count.Inc(), 30*time.Millisecond, now.Add(50*time.Millisecond))
+	s := newScheduler(now)
+	s.RunEveryAt(count.Inc(), 10*time.Millisecond, now)
+	s.RunEveryAt(count.Inc(), 30*time.Millisecond, now.Add(50*time.Millisecond))
 
-	for ts := Tick(0); ts < 10; ts++ {
-		Default.Tick(ts)
+	for i := 0; i < 10; i++ {
+		s.Tick()
 	}
 
 	assert.Equal(t, Counter(12), count)
