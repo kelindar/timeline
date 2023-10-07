@@ -15,12 +15,18 @@ var counter atomic.Uint64
 
 /*
 cpu: 13th Gen Intel(R) Core(TM) i7-13700K
-BenchmarkRun/next/10-24         	 6315861	       190.6 ns/op	        63.16 million/op	       0 B/op	       0 allocs/op
-BenchmarkRun/next/1000-24       	   70174	     17001 ns/op	        70.17 million/op	     106 B/op	       0 allocs/op
-BenchmarkRun/next/100000-24     	     510	   2063725 ns/op	        51.00 million/op	 2759780 B/op	       4 allocs/op
-BenchmarkRun/after/10-24        	 6045342	       197.3 ns/op	        60.45 million/op	       0 B/op	       0 allocs/op
-BenchmarkRun/after/100-24       	  685722	      1759 ns/op	        68.57 million/op	       0 B/op	       0 allocs/op
-BenchmarkRun/after/10000-24     	    3705	    693253 ns/op	         6.865 million/op	 1127870 B/op	       0 allocs/op
+BenchmarkRun/next/1-24         	32000341	        37.56 ns/op	        32.00 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/next/10-24        	 6282718	       191.8 ns/op	        62.83 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/next/100-24       	  685710	      1746 ns/op	        68.57 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/next/1000-24      	   70587	     17213 ns/op	        70.59 million/op	     105 B/op	       0 allocs/op
+BenchmarkRun/next/10000-24     	    6966	    170543 ns/op	        69.66 million/op	   15890 B/op	       0 allocs/op
+BenchmarkRun/next/100000-24    	     514	   2074903 ns/op	        51.40 million/op	 2738303 B/op	       4 allocs/op
+BenchmarkRun/after/1-24        	31168992	        38.53 ns/op	        31.17 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/after/10-24       	 6045394	       198.9 ns/op	        60.45 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/after/100-24      	  685732	      1761 ns/op	        68.57 million/op	       0 B/op	       0 allocs/op
+BenchmarkRun/after/1000-24     	   49078	     23361 ns/op	        48.58 million/op	    1220 B/op	       0 allocs/op
+BenchmarkRun/after/10000-24    	    3808	    730699 ns/op	         7.252 million/op	 1168807 B/op	       0 allocs/op
+BenchmarkRun/after/100000-24   	     369	   3436339 ns/op	         0.06827 million/op	12061832 B/op	       7 allocs/op
 */
 func BenchmarkRun(b *testing.B) {
 	work := func(time.Time, time.Duration) bool {
@@ -28,7 +34,7 @@ func BenchmarkRun(b *testing.B) {
 		return true
 	}
 
-	for _, size := range []int{10, 1000, 100000} {
+	for _, size := range []int{1, 10, 100, 1000, 10000, 100000} {
 		b.Run(fmt.Sprintf("next/%d", size), func(b *testing.B) {
 			counter.Store(0)
 			s := New()
@@ -46,7 +52,7 @@ func BenchmarkRun(b *testing.B) {
 		})
 	}
 
-	for _, size := range []int{10, 100, 10000} {
+	for _, size := range []int{1, 10, 100, 1000, 10000, 100000} {
 		b.Run(fmt.Sprintf("after/%d", size), func(b *testing.B) {
 			counter.Store(0)
 			s := New()
