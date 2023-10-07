@@ -117,6 +117,22 @@ func TestRun(t *testing.T) {
 	assert.Equal(t, Counter(2), count)
 }
 
+func TestTickOf(t *testing.T) {
+	tc := map[tick]time.Duration{
+		0:      0,
+		1:      10 * time.Millisecond,
+		2:      20 * time.Millisecond,
+		10:     100 * time.Millisecond,
+		100:    time.Second,
+		101:    time.Second + 10*time.Millisecond,
+		360000: time.Hour,
+	}
+
+	for expect, duration := range tc {
+		assert.Equal(t, expect, tickOf(time.Unix(0, int64(duration))))
+	}
+}
+
 // ----------------------------------------- Log -----------------------------------------
 
 // Log is a simple task that appends a string to a slice.

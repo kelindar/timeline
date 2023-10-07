@@ -1,61 +1,43 @@
 package timeline
 
-import (
-	"sync/atomic"
-	"time"
-)
-
-const (
-	resolution = 10 * time.Millisecond
-)
-
-// ----------------------------------------- Clock -----------------------------------------
-
-// Clock represents a game clock
-type Clock struct {
-	last int64 // Last updated time, in unix nano
-	now  func() int64
-}
-
-// newClock creates a new clock
-func newClock() *Clock {
-	return &Clock{
-		last: time.Now().UTC().UnixNano(),
-		now: func() int64 {
-			return time.Now().UTC().UnixNano()
-		},
-	}
-}
-
-// Elapsed computes the time between now and the last update
-func (c *Clock) Elapsed() time.Duration {
-	return time.Duration(c.now() - atomic.LoadInt64(&c.last)).Round(1 * time.Millisecond)
-}
-
-// Tick updates the current clock and returns the elapsed time
-func (c *Clock) Tick() time.Duration {
-	now := c.now()
-	dt := time.Duration(now - atomic.LoadInt64(&c.last)).Round(100 * time.Millisecond)
-	atomic.StoreInt64(&c.last, now)
-	return dt
-}
-
-// ----------------------------------------- Tick -----------------------------------------
-
-// Tick represents a point in time, rounded up to the resolution of the clock.
-type Tick int64
-
-// TickOf returns the time rounded up to the resolution of the clock.
-func TickOf(t time.Time) Tick {
-	return Tick(t.UnixNano() / int64(resolution))
-}
-
-// Time returns the time of the tick.
-func (t Tick) Time() time.Time {
-	return time.Unix(0, int64(t)*int64(resolution))
-}
-
 /*
+
+
+type clock struct {
+	interval  time.Duration
+	scheduler *Scheduler
+	ticker    *time.Ticker
+}
+
+func (c *clock) Start(ctx context.Context) context.CancelFunc {
+	ctx, cancel := context.WithCancel(ctx)
+
+	// Calculate the time until the next 10ms boundary
+	now := time.Now()
+	nextTick := now.Truncate(c.interval).Add(c.interval)
+	initialDelay := nextTick.Sub(now)
+
+	// Wait until the next resolution boundary
+	time.Sleep(initialDelay)
+
+	// Start the ticker
+	c.ticker = time.NewTicker(c.interval)
+	go func() {
+		for {
+			select {
+			case <-c.ticker.C:
+				c.scheduler.Tick()
+			case <-ctx.Done():
+				c.ticker.Stop()
+				return
+			}
+		}
+	}()
+
+	return cancel
+}
+
+
 
 func main() {
 	cq := New()
