@@ -154,6 +154,7 @@ func (s *Scheduler) Start(ctx context.Context) context.CancelFunc {
 
 	// Start the ticker
 	ticker := time.NewTicker(interval)
+	s.Tick()
 	go func() {
 		for {
 			select {

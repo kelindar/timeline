@@ -1,6 +1,8 @@
 package timeline
 
 import (
+	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -133,6 +135,19 @@ func TestTickOf(t *testing.T) {
 	}
 }
 
+func TestStart(t *testing.T) {
+	s := New()
+	defer s.Start(context.Background())()
+
+	var count Counter
+	s.RunAfter(count.Inc(), 30*time.Millisecond)
+	s.Run(count.Inc())
+	s.Run(count.Inc())
+
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, Counter(3), count)
+}
+
 // ----------------------------------------- Log -----------------------------------------
 
 // Log is a simple task that appends a string to a slice.
@@ -153,7 +168,7 @@ type Counter int64
 // Inc returns a task that increments the counter.
 func (c *Counter) Inc() Task {
 	return func() bool {
-		*c++
+		atomic.AddInt64((*int64)(c), 1)
 		return true
 	}
 }
