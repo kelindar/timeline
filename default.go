@@ -9,7 +9,7 @@ var Default = New()
 
 // RunNext schedules a task to be processed during the next tick.
 func RunNext(task Task) {
-	Default.RunNext(task)
+	Default.Run(task)
 }
 
 // RunAfter schedules a task to be processed after a given delay.

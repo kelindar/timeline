@@ -48,19 +48,19 @@ func New() *Scheduler {
 	return s
 }
 
-// RunNext schedules a task to be processed during the next tick.
-func (s *Scheduler) RunNext(task Task) {
+// Run schedules a task to be processed during the next tick.
+func (s *Scheduler) Run(task Task) {
 	s.schedule(task, Tick(s.next.Load()), 0)
-}
-
-// RunAfter schedules a task to be processed after a given delay.
-func (s *Scheduler) RunAfter(task Task, delay time.Duration) {
-	s.schedule(task, Tick(s.next.Load())+durationOf(delay), 0)
 }
 
 // RunAt schedules a task to be processed at a given time.
 func (s *Scheduler) RunAt(task Task, when time.Time) {
 	s.schedule(task, TickOf(when), 0)
+}
+
+// RunAfter schedules a task to be processed after a given delay.
+func (s *Scheduler) RunAfter(task Task, delay time.Duration) {
+	s.schedule(task, Tick(s.next.Load())+durationOf(delay), 0)
 }
 
 // RunEvery schedules a task to be processed at a given interval, starting
