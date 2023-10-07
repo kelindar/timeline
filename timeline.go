@@ -23,6 +23,7 @@ type Task = func(now time.Time, elapsed time.Duration) bool
 type job struct {
 	Task
 	Start tick
+	RunAt tick
 	Every tick
 }
 
@@ -70,8 +71,24 @@ func (s *Scheduler) RunAfter(task Task, delay time.Duration) {
 }
 
 // RunEvery schedules a task to run at 'interval' intervals, starting immediately.
-func (s *Scheduler) RunEvery(task Task, interval time.Duration) {
+/*func (s *Scheduler) RunEvery(task Task, interval time.Duration) {
 	s.schedule(task, tick(s.next.Load()), durationOf(interval))
+}*/
+
+// RunEvery schedules a task to run at 'interval' intervals, starting at the next boundary tick.
+func (s *Scheduler) RunEvery(task Task, interval time.Duration) {
+	// Calculate the current tick
+	currentTick := tick(s.next.Load())
+
+	// Calculate ticks for the provided interval
+	intervalTicks := durationOf(interval)
+
+	// Compute the next boundary tick
+	remainder := currentTick % intervalTicks
+	nextBoundaryTick := currentTick + intervalTicks - remainder
+
+	// Schedule the task to start at the next boundary tick and repeat at the given interval
+	s.schedule(task, nextBoundaryTick, intervalTicks)
 }
 
 // RunEveryAt schedules a task to run at 'interval' intervals, starting at 'startTime'.
@@ -88,11 +105,12 @@ func (s *Scheduler) RunEveryAfter(task Task, interval, delay time.Duration) {
 func (s *Scheduler) schedule(event Task, when, repeat tick) {
 	evt := job{
 		Task:  event,
-		Start: when,
+		Start: tick(s.next.Load()),
+		RunAt: when,
 		Every: repeat,
 	}
 
-	bucket := s.bucketOf(evt.Start)
+	bucket := s.bucketOf(evt.RunAt)
 
 	bucket.mu.Lock()
 	bucket.queue = append(bucket.queue, evt)
@@ -115,16 +133,28 @@ func (s *Scheduler) Tick() time.Time {
 	defer bucket.mu.Unlock()
 
 	for i, task := range bucket.queue {
-		if task.Start > tickNow { // scheduled for later
+		if task.RunAt > tickNow { // scheduled for later
 			bucket.queue[offset] = bucket.queue[i]
 			offset++
 			continue
 		}
 
-		// Process the task. If the task is recurrent, reschedule it
+		// Process the task
 		elapsed := tickNow - task.Start
-		if task.Task(timeNow, elapsed.Duration()); task.Every != 0 {
-			s.schedule(task.Task, tickNow+task.Every, task.Every)
+		repeat := task.Task(timeNow, elapsed.Duration())
+
+		// If the task is recurrent, determine how to reschedule it
+		if repeat && task.Every != 0 {
+			nextTick := tickNow + task.Every
+			switch {
+			case s.bucketOf(nextTick) == s.bucketOf(tickNow):
+				task.Start = tickNow
+				task.RunAt = nextTick
+				bucket.queue[offset] = task
+				offset++
+			default: // different bucket
+				s.schedule(task.Task, nextTick, task.Every)
+			}
 		}
 	}
 
@@ -147,13 +177,13 @@ func (s *Scheduler) Start(ctx context.Context) context.CancelFunc {
 	interval := resolution
 	ctx, cancel := context.WithCancel(ctx)
 
-	// Calculate the time until the next 10ms boundary
+	// Align the scheduler's internal clock with the nearest resolution boundary
 	now := time.Now()
 	next := now.Truncate(interval).Add(interval)
-	wait := next.Sub(now)
+	s.Seek(next)
 
 	// Wait until the next resolution boundary
-	time.Sleep(wait)
+	time.Sleep(next.Sub(now))
 
 	// Start the ticker
 	ticker := time.NewTicker(interval)

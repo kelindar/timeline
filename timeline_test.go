@@ -120,7 +120,7 @@ func TestRunEveryAt(t *testing.T) {
 		s.Tick()
 	}
 
-	assert.Equal(t, Counter(12), count)
+	assert.Equal(t, 12, count.Value())
 }
 
 func TestRunEveryAfter(t *testing.T) {
@@ -135,7 +135,7 @@ func TestRunEveryAfter(t *testing.T) {
 		s.Tick()
 	}
 
-	assert.Equal(t, Counter(12), count)
+	assert.Equal(t, 12, count.Value())
 }
 
 func TestRunEvery(t *testing.T) {
@@ -150,7 +150,7 @@ func TestRunEvery(t *testing.T) {
 		s.Tick()
 	}
 
-	assert.Equal(t, Counter(14), count)
+	assert.Equal(t, 14, count.Value())
 }
 
 func TestRun(t *testing.T) {
@@ -165,7 +165,7 @@ func TestRun(t *testing.T) {
 		s.Tick()
 	}
 
-	assert.Equal(t, Counter(2), count)
+	assert.Equal(t, 2, count.Value())
 }
 
 func TestTickOf(t *testing.T) {
@@ -194,7 +194,7 @@ func TestStart(t *testing.T) {
 	s.Run(count.Inc())
 
 	time.Sleep(100 * time.Millisecond)
-	assert.Equal(t, Counter(3), count)
+	assert.Equal(t, 3, count.Value())
 }
 
 // ----------------------------------------- Log -----------------------------------------
@@ -213,6 +213,11 @@ func (l *Log) Log(s string) Task {
 // ----------------------------------------- Counter -----------------------------------------
 
 type Counter int64
+
+// Value returns the current value of the counter.
+func (c *Counter) Value() int {
+	return int(atomic.LoadInt64((*int64)(c)))
+}
 
 // Inc returns a task that increments the counter.
 func (c *Counter) Inc() Task {
