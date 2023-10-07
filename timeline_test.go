@@ -155,7 +155,7 @@ type Log []string
 
 // Log returns a task that appends a string to the log.
 func (l *Log) Log(s string) Task {
-	return func() bool {
+	return func(time.Time) bool {
 		*l = append(*l, s)
 		return true
 	}
@@ -167,7 +167,7 @@ type Counter int64
 
 // Inc returns a task that increments the counter.
 func (c *Counter) Inc() Task {
-	return func() bool {
+	return func(time.Time) bool {
 		atomic.AddInt64((*int64)(c), 1)
 		return true
 	}

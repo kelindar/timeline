@@ -13,7 +13,7 @@ const (
 )
 
 // Task represents a task that can be scheduled.
-type Task = func() bool
+type Task = func(time.Time) bool
 
 // job represents a scheduled task.
 type job struct {
@@ -106,29 +106,30 @@ func (s *Scheduler) Seek(t time.Time) {
 // Tick advances the scheduler to the next tick, processing all events
 // and returning the current clock time.
 func (s *Scheduler) Tick() time.Time {
-	now := tick(s.next.Add(1) - 1)
-	bucket := s.bucketOf(now)
+	tickNow := tick(s.next.Add(1) - 1)
+	timeNow := tickNow.Time()
+	bucket := s.bucketOf(tickNow)
 	offset := 0
 
 	bucket.mu.Lock()
 	defer bucket.mu.Unlock()
 
 	for i, evt := range bucket.queue {
-		if evt.Start > now { // scheduled for later
+		if evt.Start > tickNow { // scheduled for later
 			bucket.queue[offset] = bucket.queue[i]
 			offset++
 			continue
 		}
 
 		// Process the task. If the task is recurrent, reschedule it
-		if evt.Task(); evt.Every != 0 {
-			s.schedule(evt.Task, now+evt.Every, evt.Every)
+		if evt.Task(timeNow); evt.Every != 0 {
+			s.schedule(evt.Task, tickNow+evt.Every, evt.Every)
 		}
 	}
 
 	// Truncate the current bucket to remove processed events
 	bucket.queue = bucket.queue[:offset]
-	return now.Time()
+	return tickNow.Time()
 }
 
 // bucketOf returns the bucket index for a given tick.
