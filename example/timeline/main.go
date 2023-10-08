@@ -16,8 +16,8 @@ func main() {
 
 	// Define a task
 	task := func(now time.Time, elapsed time.Duration) bool {
-		fmt.Printf("Task executed at %d:%02d.%03d, elapsed=%v\n",
-			now.Hour(), now.Second(), now.UnixMilli()%1000, elapsed)
+		fmt.Printf("Task executed at %02d.%03d, elapsed=%v\n",
+			now.Second(), now.UnixMilli()%1000, elapsed)
 		return true // return true to keep the task scheduled
 	}
 

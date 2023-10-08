@@ -59,23 +59,23 @@ time.Sleep(10 * time.Second)
 It outputs:
 
 ```
-Task executed at 22:04.400, elapsed=0s
-Task executed at 22:05.000, elapsed=600ms
-Task executed at 22:06.000, elapsed=1s
-Task executed at 22:07.000, elapsed=1s
-Task executed at 22:08.000, elapsed=1s
-Task executed at 22:09.000, elapsed=1s
-Task executed at 22:09.400, elapsed=5s
-Task executed at 22:10.000, elapsed=1s
-Task executed at 22:11.000, elapsed=1s
-Task executed at 22:12.000, elapsed=1s
-Task executed at 22:13.000, elapsed=1s
-Task executed at 22:14.000, elapsed=1s
+Task executed at 04.400, elapsed=0s
+Task executed at 05.000, elapsed=600ms
+Task executed at 06.000, elapsed=1s
+Task executed at 07.000, elapsed=1s
+Task executed at 08.000, elapsed=1s
+Task executed at 09.000, elapsed=1s
+Task executed at 09.400, elapsed=5s
+Task executed at 10.000, elapsed=1s
+Task executed at 11.000, elapsed=1s
+Task executed at 12.000, elapsed=1s
+Task executed at 13.000, elapsed=1s
+Task executed at 14.000, elapsed=1s
 ```
 
 ## Event Scheduling (Integration)
 
-The [github.com/kelindar/timeline/event](https://github.com/kelindar/timeline/tree/main/event) sub-package seamlessly integrates the timeline scheduler with event-driven programming. It allows you to emit and subscribe to events with precise timing, making it ideal for applications that require both event-driven architectures and time-based scheduling.
+The [github.com/kelindar/timeline/emit](https://github.com/kelindar/timeline/tree/main/emit) sub-package seamlessly integrates the timeline scheduler with event-driven programming. It allows you to emit and subscribe to events with precise timing, making it ideal for applications that require both event-driven architectures and time-based scheduling.
 
 ```go
 // Custom event type
@@ -91,16 +91,17 @@ func (Message) Type() uint32 {
 func main() {
 
 	// Emit the event immediately
-	event.Emit(Message{Text: "Hello, World!"})
+	event.Next(Message{Text: "Hello, World!"})
 
 	// Emit the event every second
-	event.EmitEvery(Message{Text: "Are we there yet?"}, 1*time.Second)
+	event.Every(Message{Text: "Are we there yet?"}, 1*time.Second)
 
 	// Subscribe and Handle the Event
-	cancel := event.On[Message](func(ev event.Event[Message]) {
+	cancel := event.On[Message](func(ev Message, now time.Time, elapsed time.Duration) error {
 		fmt.Printf("Received '%s' at %02d.%03d, elapsed=%v\n",
-			ev.Data.Text,
-			ev.Time.Second(), ev.Time.UnixMilli()%1000, ev.Elapsed)
+			ev.Text,
+			now.Second(), now.UnixMilli()%1000, elapsed)
+		return nil
 	})
 	defer cancel() // Remember to unsubscribe when done
 
