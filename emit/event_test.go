@@ -2,6 +2,7 @@ package emit
 
 import (
 	"fmt"
+	"math"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -123,6 +124,28 @@ func TestOnTypeError(t *testing.T) {
 	// Fail in dynamic event handler
 	Next(Dynamic{ID: 42})
 	assert.Equal(t, "OnType()", (<-errors).Error())
+}
+
+func TestOnEvery(t *testing.T) {
+	events := make(chan MyEvent2)
+	defer OnEvery(func(now time.Time, elapsed time.Duration) error {
+		events <- MyEvent2{}
+		return nil
+	}, 20*time.Millisecond)()
+
+	// Emit the event
+	<-events
+	<-events
+	<-events
+}
+
+func TestTooManyTimers(t *testing.T) {
+	assert.Panics(t, func() {
+		nextTimerID = math.MaxUint32 - 1
+		defer OnEvery(func(now time.Time, elapsed time.Duration) error {
+			return nil
+		}, 200*time.Millisecond)()
+	})
 }
 
 // ------------------------------------- Test Events -------------------------------------

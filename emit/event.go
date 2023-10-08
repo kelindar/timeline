@@ -6,6 +6,7 @@ package emit
 import (
 	"context"
 	"math"
+	"sync/atomic"
 	"time"
 
 	"github.com/kelindar/event"
@@ -46,6 +47,20 @@ func (e fault) Type() uint32 {
 	return math.MaxUint32
 }
 
+// ----------------------------------------- Timer Event -----------------------------------------
+
+var nextTimerID uint32 = 1 << 30
+
+// timer represents a timer event
+type timer struct {
+	ID uint32
+}
+
+// Type returns the type of the event
+func (e timer) Type() uint32 {
+	return e.ID
+}
+
 // ----------------------------------------- Subscribe -----------------------------------------
 
 // On subscribes to an event, the type of the event will be automatically
@@ -72,6 +87,23 @@ func OnError(handler func(err error, about any)) context.CancelFunc {
 	return event.Subscribe[fault](event.Default, func(m fault) {
 		handler(m.error, m.About)
 	})
+}
+
+// OnEvery creates a timer that fires every 'interval' and calls the handler.
+func OnEvery(handler func(now time.Time, elapsed time.Duration) error, interval time.Duration) context.CancelFunc {
+	id := atomic.AddUint32(&nextTimerID, 1)
+	if id >= (math.MaxUint32 - 1) {
+		panic("emit: too many timers created")
+	}
+
+	// Subscribe to the timer event
+	cancel := OnType[timer](id, func(_ timer, now time.Time, elapsed time.Duration) error {
+		return handler(now, elapsed)
+	})
+
+	// Start the timer
+	Every(timer{ID: id}, interval)
+	return cancel
 }
 
 // ----------------------------------------- Publish -----------------------------------------
