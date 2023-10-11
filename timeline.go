@@ -88,19 +88,21 @@ func (s *Scheduler) RunEveryAfter(task Task, interval, delay time.Duration) {
 	s.schedule(task, s.after(delay), durationOf(interval))
 }
 
-// ScheduleFunc schedules an event to be processed at a given time.
+// schedule schedules an event to be processed at a given time.
 func (s *Scheduler) schedule(event Task, when tick, repeat span) {
-	evt := job{
+	s.enqueueJob(job{
 		Task:  event,
 		RunAt: when,
 		Since: span(when - s.now()),
 		Every: repeat,
-	}
+	})
+}
 
-	bucket := s.bucketOf(evt.RunAt)
-
+// enqueueJob adds a job to the queue.
+func (s *Scheduler) enqueueJob(job job) {
+	bucket := s.bucketOf(job.RunAt)
 	bucket.mu.Lock()
-	bucket.queue = append(bucket.queue, evt)
+	bucket.queue = append(bucket.queue, job)
 	bucket.mu.Unlock()
 }
 
@@ -139,7 +141,12 @@ func (s *Scheduler) Tick() time.Time {
 				bucket.queue[offset] = task
 				offset++
 			default: // different bucket
-				s.schedule(task.Task, nextTick, task.Every)
+				s.enqueueJob(job{
+					Task:  task.Task,
+					RunAt: nextTick,
+					Since: task.Every,
+					Every: task.Every,
+				})
 			}
 		}
 	}
