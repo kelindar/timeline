@@ -6,6 +6,7 @@ package timeline
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -189,6 +190,26 @@ func TestRun(t *testing.T) {
 	}
 
 	assert.Equal(t, 2, count.Value())
+}
+
+func TestElapsed(t *testing.T) {
+	s := New()
+
+	var wg sync.WaitGroup
+	wg.Add(3)
+	s.RunEvery(func(now time.Time, elapsed time.Duration) bool {
+		fmt.Printf("Tick at %02d.%03d, elapsed=%v\n",
+			now.Second(), now.UnixMilli()%1000, elapsed)
+		assert.Equal(t, 10*time.Millisecond, elapsed)
+		wg.Done()
+		return true
+	}, 10*time.Millisecond)
+
+	s.Tick()
+	s.Tick()
+	s.Tick()
+	s.Tick()
+	wg.Wait()
 }
 
 func TestTickOf(t *testing.T) {

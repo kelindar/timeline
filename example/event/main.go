@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	event "github.com/kelindar/timeline/emit"
+	"github.com/kelindar/timeline/emit"
 )
 
 // Custom event type
@@ -20,13 +20,13 @@ func (Message) Type() uint32 {
 func main() {
 
 	// Emit the event immediately
-	event.Next(Message{Text: "Hello, World!"})
+	emit.Next(Message{Text: "Hello, World!"})
 
 	// Emit the event every second
-	event.Every(Message{Text: "Are we there yet?"}, 1*time.Second)
+	emit.Every(Message{Text: "Are we there yet?"}, 500*time.Millisecond)
 
 	// Subscribe and Handle the Event
-	cancel := event.On[Message](func(ev Message, now time.Time, elapsed time.Duration) error {
+	cancel := emit.On[Message](func(ev Message, now time.Time, elapsed time.Duration) error {
 		fmt.Printf("Received '%s' at %02d.%03d, elapsed=%v\n",
 			ev.Text,
 			now.Second(), now.UnixMilli()%1000, elapsed)

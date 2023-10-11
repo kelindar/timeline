@@ -51,13 +51,13 @@ func (e fault) Type() uint32 {
 
 var nextTimerID uint32 = 1 << 30
 
-// timer represents a timer event
-type timer struct {
+// Timer represents a Timer event
+type Timer struct {
 	ID uint32
 }
 
 // Type returns the type of the event
-func (e timer) Type() uint32 {
+func (e Timer) Type() uint32 {
 	return e.ID
 }
 
@@ -97,12 +97,12 @@ func OnEvery(handler func(now time.Time, elapsed time.Duration) error, interval 
 	}
 
 	// Subscribe to the timer event
-	cancel := OnType[timer](id, func(_ timer, now time.Time, elapsed time.Duration) error {
+	cancel := OnType[Timer](id, func(_ Timer, now time.Time, elapsed time.Duration) error {
 		return handler(now, elapsed)
 	})
 
 	// Start the timer
-	Every(timer{ID: id}, interval)
+	Every(Timer{ID: id}, interval)
 	return cancel
 }
 
