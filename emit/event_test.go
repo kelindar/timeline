@@ -148,7 +148,7 @@ func TestEveryCancel(t *testing.T) {
 	})()
 
 	// Start recurring event
-	cancel := Every(MyEvent2{Text: "Recurring"}, 10*time.Millisecond)
+	cancel := Every(MyEvent2{Text: "Recurring"}, 20*time.Millisecond)
 
 	// Wait for a few events
 	<-events
@@ -159,7 +159,7 @@ func TestEveryCancel(t *testing.T) {
 	cancel()
 
 	// Wait a bit to ensure no more events come
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	// Channel should not have more events (non-blocking check)
 	select {
