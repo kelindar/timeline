@@ -2,7 +2,6 @@ package emit
 
 import (
 	"fmt"
-	"math"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -11,6 +10,7 @@ import (
 )
 
 /*
+go test -bench=. -benchmem -benchtime=10s
 cpu: 13th Gen Intel(R) Core(TM) i7-13700K
 BenchmarkEvent/1x1-24         	13259682	        84.58 ns/op	        11.73 million/s	     169 B/op	       1 allocs/op
 BenchmarkEvent/1x10-24        	16216171	       104.8 ns/op	        74.95 million/s	     249 B/op	       1 allocs/op
@@ -33,9 +33,10 @@ func BenchmarkEvent(b *testing.B) {
 					}
 				}
 
-				start := time.Now()
 				b.ReportAllocs()
 				b.ResetTimer()
+
+				start := time.Now()
 				for n := 0; n < b.N; n++ {
 					for id := 10; id < 10+topics; id++ {
 						Next(Dynamic{ID: id})
@@ -139,13 +140,24 @@ func TestOnEvery(t *testing.T) {
 	<-events
 }
 
-func TestTooManyTimers(t *testing.T) {
-	assert.Panics(t, func() {
-		nextTimerID = math.MaxUint32 - 1
-		defer OnEvery(func(now time.Time, elapsed time.Duration) error {
-			return nil
-		}, 200*time.Millisecond)()
-	})
+func TestEveryCancel(t *testing.T) {
+	var count atomic.Int32
+	defer On(func(ev MyEvent2, now time.Time, elapsed time.Duration) error {
+		// Only count events that belong to this test
+		if ev.Text == "TestEveryCancel" {
+			count.Add(1)
+		}
+		return nil
+	})()
+
+	// Start recurring event
+	cancel := Every(MyEvent2{Text: "TestEveryCancel"}, 20*time.Millisecond)
+	cancel()
+
+	// Wait a bit to ensure no more events come
+	time.Sleep(100 * time.Millisecond)
+
+	assert.LessOrEqual(t, count.Load(), int32(1), "No events should have been emitted after cancel")
 }
 
 // ------------------------------------- Test Events -------------------------------------

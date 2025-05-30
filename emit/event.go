@@ -124,18 +124,27 @@ func After[T event.Event](ev T, after time.Duration) {
 }
 
 // Every writes an event at 'interval' intervals, starting at the next boundary tick.
-func Every[T event.Event](ev T, interval time.Duration) {
-	Scheduler.RunEvery(emit(ev), interval)
+// Returns a cancel function to stop the recurring event.
+func Every[T event.Event](ev T, interval time.Duration) context.CancelFunc {
+	return emitEvery(ev, interval, func(task timeline.Task, interval time.Duration) {
+		Scheduler.RunEvery(task, interval)
+	})
 }
 
 // EveryAt writes an event at 'interval' intervals, starting at 'startTime'.
-func EveryAt[T event.Event](ev T, interval time.Duration, startTime time.Time) {
-	Scheduler.RunEveryAt(emit(ev), interval, startTime)
+// Returns a cancel function to stop the recurring event.
+func EveryAt[T event.Event](ev T, interval time.Duration, startTime time.Time) context.CancelFunc {
+	return emitEvery(ev, interval, func(task timeline.Task, interval time.Duration) {
+		Scheduler.RunEveryAt(task, interval, startTime)
+	})
 }
 
 // EveryAfter writes an event at 'interval' intervals after a 'delay'.
-func EveryAfter[T event.Event](ev T, interval time.Duration, delay time.Duration) {
-	Scheduler.RunEveryAfter(emit(ev), interval, delay)
+// Returns a cancel function to stop the recurring event.
+func EveryAfter[T event.Event](ev T, interval time.Duration, delay time.Duration) context.CancelFunc {
+	return emitEvery(ev, interval, func(task timeline.Task, interval time.Duration) {
+		Scheduler.RunEveryAfter(task, interval, delay)
+	})
 }
 
 // Error writes an error event.
@@ -155,5 +164,23 @@ func emit[T event.Event](ev T) func(now time.Time, elapsed time.Duration) bool {
 			Elapsed: elapsed,
 		})
 		return true
+	}
+}
+
+// emitEvery creates a cancellable recurring event
+func emitEvery[T event.Event](ev T, interval time.Duration, scheduler func(timeline.Task, time.Duration)) func() {
+	var cancelled atomic.Bool
+	task := func(now time.Time, elapsed time.Duration) bool {
+		event.Publish(event.Default, signal[T]{
+			Data:    ev,
+			Time:    now,
+			Elapsed: elapsed,
+		})
+		return !cancelled.Load()
+	}
+
+	scheduler(task, interval)
+	return func() {
+		cancelled.Store(true)
 	}
 }
