@@ -13,6 +13,7 @@ import (
 const (
 	resolution = 10 * time.Millisecond
 	numBuckets = int(1 * time.Second / resolution)
+	maxJobs    = 1e5 // ~ 10M ev/s
 )
 
 // Task defines a scheduled function. 'now' is the execution time, and 'elapsed'
@@ -31,7 +32,6 @@ type job struct {
 }
 
 // bucket represents a bucket for a particular window of the second.
-// TODO: this could be optimized with double buffering to reduce locking.
 type bucket struct {
 	mu    sync.Mutex
 	queue []job
@@ -40,7 +40,8 @@ type bucket struct {
 // Scheduler manages and executes scheduled tasks.
 type Scheduler struct {
 	next    atomic.Int64 // next tick
-	buckets []*bucket
+	buckets []*bucket    // Buckets for scheduling jobs
+	jobs    atomic.Int32 // Number of jobs currently scheduled
 }
 
 // New initializes and returns a new Scheduler.
@@ -90,6 +91,10 @@ func (s *Scheduler) RunEveryAfter(task Task, interval, delay time.Duration) {
 
 // schedule schedules an event to be processed at a given time.
 func (s *Scheduler) schedule(event Task, when tick, repeat span) {
+	for count := s.jobs.Add(1); count >= maxJobs; count = s.jobs.Load() {
+		time.Sleep(500 * time.Microsecond)
+	}
+
 	s.enqueueJob(job{
 		Task:  event,
 		RunAt: when,
@@ -98,7 +103,7 @@ func (s *Scheduler) schedule(event Task, when tick, repeat span) {
 	})
 }
 
-// enqueueJob adds a job to the queue.
+// enqueueJob adds a job to the queue. If the queue is full, it will wait briefly.
 func (s *Scheduler) enqueueJob(job job) {
 	bucket := s.bucketOf(job.RunAt)
 	bucket.mu.Lock()
@@ -148,6 +153,8 @@ func (s *Scheduler) Tick() time.Time {
 					Every: task.Every,
 				})
 			}
+		} else {
+			s.jobs.Add(-1)
 		}
 	}
 

@@ -3,8 +3,8 @@ module github.com/kelindar/timeline
 go 1.20
 
 require (
-	github.com/kelindar/event v1.4.1
-	github.com/stretchr/testify v1.8.4
+	github.com/kelindar/event v1.5.2
+	github.com/stretchr/testify v1.10.0
 )
 
 require (

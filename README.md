@@ -9,24 +9,24 @@
 </p>
 
 ## Timeline: High-Performance Task Scheduling in Go
+This library provides a **high-performance, in-memory task scheduler** for Go, designed for precise and efficient time-based task management. It uses a 10ms resolution and a bucketing system for scalable scheduling, making it ideal for real-time and concurrent applications.
 
-This library provides a simple and efficient way to schedule and manage tasks based on time. It offers a fine-grained resolution of 10 milliseconds and uses a bucketing system to efficiently manage scheduled tasks. The library is designed to be thread-safe and can handle concurrent scheduling and execution of tasks.
+- **High Performance:** Optimized for rapid scheduling and execution of thousands of tasks per second, with minimal overhead.
+- **Fine-Grained Precision:** Schedules tasks with 10ms accuracy, suitable for high-frequency or real-time workloads.
+- **Efficient Memory Use:** Predictable, linear memory consumption thanks to its bucketing design.
+- **Thread-Safe:** Safe for concurrent use, supporting multi-threaded scheduling and execution.
 
-### Advantages
+![demo](./.github/demo.gif)
 
-1. **High Performance**: This library is optimized for speed, handling a large number of tasks with minimal overhead. For instance, it's ideal for real-time game servers where tasks like player movements or AI decisions need frequent scheduling.
+**Use When:**
+- ✅ Scheduling frequent, short-lived tasks (e.g., game loops, real-time updates).
+- ✅ Requiring precise, low-latency task execution within a single Go process.
+- ✅ Building systems where predictable memory and performance are critical.
+- ✅ Needing a simple, dependency-free scheduler for in-process workloads.
 
-2. **Fine-grained Resolution**: With its 10ms resolution, this package offers precise scheduling. This resolution is useful for applications where tasks need to be scheduled at a high frequency.
-
-3. **Efficient Memory Management**: The library's bucketing system ensures linear and predictable memory consumption. This efficiency is beneficial in cloud environments where memory usage impacts costs.
-
-4. **Thread-safe**: Timeline is designed for concurrent scheduling and execution, making it suitable for multi-threaded applications like web servers handling simultaneous requests.
-
-### Disadvantages
-
-1. **Not Suitable for Long-term Scheduling**: This library is optimized for short-term tasks. It's not intended for tasks scheduled days or weeks in advance, making it less ideal for applications like calendar reminders.
-
-2. **Requires Active Ticking**: The library needs active ticking (via the Tick method) to process tasks. This design might not be suitable for scenarios with sporadic task scheduling.
+**Not For:**
+- ❌ Long-term scheduling (tasks days/weeks in advance).
+- ❌ Applications with highly sporadic or infrequent task scheduling (due to required ticking).
 
 ## Quick Start
 
@@ -94,10 +94,10 @@ func main() {
 	event.Next(Message{Text: "Hello, World!"})
 
 	// Emit the event every second
-	event.Every(Message{Text: "Are we there yet?"}, 1*time.Second)
+	event.Every(Message{Text: "Are we there yet?"}, 500*time.Millisecond)
 
 	// Subscribe and Handle the Event
-	cancel := event.On[Message](func(ev Message, now time.Time, elapsed time.Duration) error {
+	cancel := event.On(func(ev Message, now time.Time, elapsed time.Duration) error {
 		fmt.Printf("Received '%s' at %02d.%03d, elapsed=%v\n",
 			ev.Text,
 			now.Second(), now.UnixMilli()%1000, elapsed)
@@ -110,24 +110,19 @@ func main() {
 }
 ```
 
-## Benchmarks
+The example above demonstrates how to create a custom event type, emit events, and subscribe to them using the timeline scheduler. It outputs:
 
-The following benchmarks were ran on a 13th Gen Intel(R) Core(TM) i7-13700K. Two scenarios are compared
+```
+Received 'Hello, World!' at 19.580, elapsed=0s
+Received 'Are we there yet?' at 20.000, elapsed=420ms
+Received 'Are we there yet?' at 20.500, elapsed=500ms
+Received 'Are we there yet?' at 21.000, elapsed=500ms
+Received 'Are we there yet?' at 21.500, elapsed=500ms
+Received 'Are we there yet?' at 22.000, elapsed=500ms
+Received 'Are we there yet?' at 22.500, elapsed=500ms
+Received 'Are we there yet?' at 23.000, elapsed=500ms
+Received 'Are we there yet?' at 23.500, elapsed=500ms
+Received 'Are we there yet?' at 24.000, elapsed=500ms
+Received 'Are we there yet?' at 24.500, elapsed=500ms
+```
 
-1.  Immediate event scheduling (next tick)
-2.  Delayed event scheduling, bigger the batck farther the delay
-
-| Type  | Input Size | Nanoseconds/Op | Million Run/Sec | Allocs/Op |
-| ----- | ---------- | -------------- | --------------- | --------- |
-| next  | 1          | 37.56          | 32.0 Million    | 0         |
-| next  | 10         | 191.8          | 62.83 Million   | 0         |
-| next  | 100        | 1746.0         | 68.57 Million   | 0         |
-| next  | 1000       | 17213.0        | 70.59 Million   | 0         |
-| next  | 10000      | 170543.0       | 69.66 Million   | 0         |
-| next  | 100000     | 2074903.0      | 51.4 Million    | 4         |
-| after | 1          | 38.53          | 31.17 Million   | 0         |
-| after | 10         | 198.9          | 60.45 Million   | 0         |
-| after | 100        | 1761.0         | 68.57 Million   | 0         |
-| after | 1000       | 23361.0        | 48.58 Million   | 0         |
-| after | 10000      | 730699.0       | 7.252 Million   | 0         |
-| after | 100000     | 3436339.0      | 0.06827 Million | 7         |
