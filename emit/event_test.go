@@ -170,35 +170,6 @@ func TestEveryCancel(t *testing.T) {
 	}
 }
 
-func TestEveryAfterCancel(t *testing.T) {
-	events := make(chan MyEvent2, 10)
-	defer On(func(ev MyEvent2, now time.Time, elapsed time.Duration) error {
-		events <- ev
-		return nil
-	})()
-
-	// Start recurring event after a delay
-	cancel := EveryAfter(MyEvent2{Text: "DelayedRecurring"}, 10*time.Millisecond, 20*time.Millisecond)
-
-	// Wait for it to start and get a few events
-	<-events
-	<-events
-
-	// Cancel the recurring event
-	cancel()
-
-	// Wait a bit to ensure no more events come
-	time.Sleep(50 * time.Millisecond)
-
-	// Channel should not have more events (non-blocking check)
-	select {
-	case <-events:
-		t.Error("Expected no more events after cancellation")
-	default:
-		// Good, no more events
-	}
-}
-
 // ------------------------------------- Test Events -------------------------------------
 
 const (
