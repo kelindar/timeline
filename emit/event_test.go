@@ -143,12 +143,15 @@ func TestOnEvery(t *testing.T) {
 func TestEveryCancel(t *testing.T) {
 	var count atomic.Int32
 	defer On(func(ev MyEvent2, now time.Time, elapsed time.Duration) error {
-		count.Add(1)
+		// Only count events that belong to this test
+		if ev.Text == "TestEveryCancel" {
+			count.Add(1)
+		}
 		return nil
 	})()
 
 	// Start recurring event
-	cancel := Every(MyEvent2{Text: "Recurring"}, 20*time.Millisecond)
+	cancel := Every(MyEvent2{Text: "TestEveryCancel"}, 20*time.Millisecond)
 	cancel()
 
 	// Wait a bit to ensure no more events come

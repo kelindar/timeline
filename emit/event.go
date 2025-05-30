@@ -171,10 +171,6 @@ func emit[T event.Event](ev T) func(now time.Time, elapsed time.Duration) bool {
 func emitEvery[T event.Event](ev T, interval time.Duration, scheduler func(timeline.Task, time.Duration)) func() {
 	var cancelled atomic.Bool
 	task := func(now time.Time, elapsed time.Duration) bool {
-		if cancelled.Load() {
-			return false // Stop recurring
-		}
-
 		event.Publish(event.Default, signal[T]{
 			Data:    ev,
 			Time:    now,
