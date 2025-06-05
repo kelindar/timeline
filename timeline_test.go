@@ -230,6 +230,31 @@ func TestJobSize(t *testing.T) {
 	assert.Equal(t, 24, int(size))
 }
 
+func TestRunDuringTickDeadlocks(t *testing.T) {
+	s := newScheduler(time.Unix(0, 0))
+	bucket := s.bucketOf(s.now())
+
+	s.Run(func(time.Time, time.Duration) bool {
+		s.Run(func(time.Time, time.Duration) bool { return false })
+		return false
+	})
+
+	done := make(chan struct{})
+	go func() {
+		s.Tick()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatalf("Tick() returned early")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	bucket.mu.Unlock()
+	<-done
+}
+
 // ----------------------------------------- Log -----------------------------------------
 
 // Log is a simple task that appends a string to a slice.
