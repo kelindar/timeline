@@ -48,14 +48,14 @@ type Scheduler struct {
 	next    atomic.Int64 // next tick
 	buckets []*bucket    // Buckets for scheduling jobs
 	jobs    atomic.Int32 // Number of jobs currently scheduled
-	pending []run        // reusable buffer for task execution
+	pending []job        // reusable buffer for task execution
 }
 
 // New initializes and returns a new Scheduler.
 func New() *Scheduler {
 	s := &Scheduler{
 		buckets: make([]*bucket, numBuckets),
-		pending: make([]run, 0, 64), // pre-allocate execution buffer
+		pending: make([]job, 0, 64), // pre-allocate execution buffer
 	}
 
 	for i := 0; i < numBuckets; i++ {
@@ -140,19 +140,15 @@ func (s *Scheduler) Tick() time.Time {
 			bucket.queue[offset] = task
 			offset++
 		default:
-			s.pending = append(s.pending, run{
-				task: task,
-				time: timeNow,
-			})
+			s.pending = append(s.pending, task)
 		}
 	}
 	bucket.queue = bucket.queue[:offset]
 	bucket.mu.Unlock()
 
 	// Execute tasks (without lock to prevent deadlock)
-	for _, exec := range s.pending {
-		task := exec.task
-		repeat := task.Task(exec.time, task.Since.Duration()) && task.Every != 0
+	for _, task := range s.pending {
+		repeat := task.Task(timeNow, task.Since.Duration()) && task.Every != 0
 		nextTick := tickNow + tick(task.Every)
 
 		switch {
