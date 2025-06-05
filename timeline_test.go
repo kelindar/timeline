@@ -291,9 +291,9 @@ func TestFutureTasksRetained(t *testing.T) {
 	var execLog Log
 
 	// Schedule tasks for different times
-	s.RunAt(execLog.Log("immediate"), now)                         // should run on first tick
 	s.RunAt(execLog.Log("future1"), now.Add(50*time.Millisecond))  // should run on tick 5
 	s.RunAt(execLog.Log("future2"), now.Add(100*time.Millisecond)) // should run on tick 10
+	s.RunAt(execLog.Log("immediate"), now)                         // should run on first tick
 
 	// First tick - only immediate task should run
 	s.Tick()
