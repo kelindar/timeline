@@ -37,17 +37,25 @@ type bucket struct {
 	queue []job
 }
 
+// run holds the context for executing a task
+type run struct {
+	task job
+	time time.Time
+}
+
 // Scheduler manages and executes scheduled tasks.
 type Scheduler struct {
 	next    atomic.Int64 // next tick
 	buckets []*bucket    // Buckets for scheduling jobs
 	jobs    atomic.Int32 // Number of jobs currently scheduled
+	pending []run        // reusable buffer for task execution
 }
 
 // New initializes and returns a new Scheduler.
 func New() *Scheduler {
 	s := &Scheduler{
 		buckets: make([]*bucket, numBuckets),
+		pending: make([]run, 0, 64), // pre-allocate execution buffer
 	}
 
 	for i := 0; i < numBuckets; i++ {
@@ -121,10 +129,11 @@ func (s *Scheduler) Tick() time.Time {
 	tickNow := tick(s.next.Add(1) - 1)
 	timeNow := tickNow.Time()
 	bucket := s.bucketOf(tickNow)
-	offset := 0
 
+	// Phase 1: Collect tasks to execute (with lock)
 	bucket.mu.Lock()
-	defer bucket.mu.Unlock()
+	s.pending = s.pending[:0] // reuse buffer
+	offset := 0
 
 	for i, task := range bucket.queue {
 		if task.RunAt > tickNow { // scheduled for later
@@ -133,18 +142,33 @@ func (s *Scheduler) Tick() time.Time {
 			continue
 		}
 
-		// Process the task
-		repeat := task.Task(timeNow, task.Since.Duration())
+		// Collect task for execution
+		s.pending = append(s.pending, run{
+			task: task,
+			time: timeNow,
+		})
+	}
 
-		// If the task is recurrent, determine how to reschedule it
+	// Update bucket queue to remove tasks that will be executed
+	bucket.queue = bucket.queue[:offset]
+	bucket.mu.Unlock()
+
+	// Phase 2: Execute tasks (without lock to prevent deadlock)
+	for _, exec := range s.pending {
+		task := exec.task
+		repeat := task.Task(exec.time, task.Since.Duration())
+
+		// Phase 3: Handle rescheduling (with appropriate locks)
 		if repeat && task.Every != 0 {
 			nextTick := tickNow + tick(task.Every)
 			switch {
 			case s.bucketOf(nextTick) == s.bucketOf(tickNow):
+				// Same bucket - need to add back to current bucket
+				bucket.mu.Lock()
 				task.Since = span(nextTick - tickNow)
 				task.RunAt = nextTick
-				bucket.queue[offset] = task
-				offset++
+				bucket.queue = append(bucket.queue, task)
+				bucket.mu.Unlock()
 			default: // different bucket
 				s.enqueueJob(job{
 					Task:  task.Task,
@@ -158,8 +182,6 @@ func (s *Scheduler) Tick() time.Time {
 		}
 	}
 
-	// Truncate the current bucket to remove processed events
-	bucket.queue = bucket.queue[:offset]
 	return tickNow.Time()
 }
 
