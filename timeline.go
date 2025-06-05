@@ -129,31 +129,27 @@ func (s *Scheduler) Tick() time.Time {
 	tickNow := tick(s.next.Add(1) - 1)
 	timeNow := tickNow.Time()
 	bucket := s.bucketOf(tickNow)
-
-	// Phase 1: Collect tasks to execute (with lock)
-	bucket.mu.Lock()
-	s.pending = s.pending[:0] // reuse buffer
 	offset := 0
 
-	for i, task := range bucket.queue {
-		if task.RunAt > tickNow { // scheduled for later
-			bucket.queue[offset] = bucket.queue[i]
+	// Collect tasks to execute
+	bucket.mu.Lock()
+	s.pending = s.pending[:0] // reuse buffer
+	for _, task := range bucket.queue {
+		switch {
+		case task.RunAt > tickNow:
+			bucket.queue[offset] = task
 			offset++
-			continue
+		default:
+			s.pending = append(s.pending, run{
+				task: task,
+				time: timeNow,
+			})
 		}
-
-		// Collect task for execution
-		s.pending = append(s.pending, run{
-			task: task,
-			time: timeNow,
-		})
 	}
-
-	// Update bucket queue to retain future tasks and remove executed ones
 	bucket.queue = bucket.queue[:offset]
 	bucket.mu.Unlock()
 
-	// Phase 2: Execute tasks (without lock to prevent deadlock)
+	// Execute tasks (without lock to prevent deadlock)
 	for _, exec := range s.pending {
 		task := exec.task
 		repeat := task.Task(exec.time, task.Since.Duration()) && task.Every != 0
