@@ -149,35 +149,34 @@ func (s *Scheduler) Tick() time.Time {
 		})
 	}
 
-	// Update bucket queue to remove tasks that will be executed
+	// Update bucket queue to retain future tasks and remove executed ones
 	bucket.queue = bucket.queue[:offset]
 	bucket.mu.Unlock()
 
 	// Phase 2: Execute tasks (without lock to prevent deadlock)
 	for _, exec := range s.pending {
 		task := exec.task
-		repeat := task.Task(exec.time, task.Since.Duration())
+		repeat := task.Task(exec.time, task.Since.Duration()) && task.Every != 0
+		nextTick := tickNow + tick(task.Every)
 
-		// Phase 3: Handle rescheduling (with appropriate locks)
-		if repeat && task.Every != 0 {
-			nextTick := tickNow + tick(task.Every)
-			switch {
-			case s.bucketOf(nextTick) == s.bucketOf(tickNow):
-				// Same bucket - need to add back to current bucket
-				bucket.mu.Lock()
-				task.Since = span(nextTick - tickNow)
-				task.RunAt = nextTick
-				bucket.queue = append(bucket.queue, task)
-				bucket.mu.Unlock()
-			default: // different bucket
-				s.enqueueJob(job{
-					Task:  task.Task,
-					RunAt: nextTick,
-					Since: task.Every,
-					Every: task.Every,
-				})
-			}
-		} else {
+		switch {
+		case repeat && s.bucketOf(nextTick) == s.bucketOf(tickNow):
+			bucket.mu.Lock()
+			task.Since = span(nextTick - tickNow)
+			task.RunAt = nextTick
+			bucket.queue = append(bucket.queue, task)
+			bucket.mu.Unlock()
+		case repeat: // different bucket
+			bucket := s.bucketOf(nextTick)
+			bucket.mu.Lock()
+			bucket.queue = append(bucket.queue, job{
+				Task:  task.Task,
+				RunAt: nextTick,
+				Since: task.Every,
+				Every: task.Every,
+			})
+			bucket.mu.Unlock()
+		default:
 			s.jobs.Add(-1)
 		}
 	}

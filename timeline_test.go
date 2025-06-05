@@ -285,6 +285,33 @@ func TestNestedSchedulingScenarios(t *testing.T) {
 	assert.Equal(t, 4, execCount.Value())
 }
 
+func TestFutureTasksRetained(t *testing.T) {
+	now := time.Unix(0, 0)
+	s := newScheduler(now)
+	var execLog Log
+
+	// Schedule tasks for different times
+	s.RunAt(execLog.Log("immediate"), now)                         // should run on first tick
+	s.RunAt(execLog.Log("future1"), now.Add(50*time.Millisecond))  // should run on tick 5
+	s.RunAt(execLog.Log("future2"), now.Add(100*time.Millisecond)) // should run on tick 10
+
+	// First tick - only immediate task should run
+	s.Tick()
+	assert.Equal(t, Log{"immediate"}, execLog)
+
+	// Advance to tick 5 - future1 should run
+	for i := 0; i < 5; i++ {
+		s.Tick()
+	}
+	assert.Equal(t, Log{"immediate", "future1"}, execLog)
+
+	// Advance to tick 10 - future2 should run
+	for i := 0; i < 5; i++ {
+		s.Tick()
+	}
+	assert.Equal(t, Log{"immediate", "future1", "future2"}, execLog)
+}
+
 // ----------------------------------------- Log -----------------------------------------
 
 // Log is a simple task that appends a string to a slice.
