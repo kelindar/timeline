@@ -232,7 +232,6 @@ func TestJobSize(t *testing.T) {
 
 func TestRunDuringTickDeadlocks(t *testing.T) {
 	s := newScheduler(time.Unix(0, 0))
-	bucket := s.bucketOf(s.now())
 
 	s.Run(func(time.Time, time.Duration) bool {
 		s.Run(func(time.Time, time.Duration) bool { return false })
@@ -247,12 +246,70 @@ func TestRunDuringTickDeadlocks(t *testing.T) {
 
 	select {
 	case <-done:
-		t.Fatalf("Tick() returned early")
-	case <-time.After(20 * time.Millisecond):
+		// Success! Tick() completed without deadlock
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("Tick() deadlocked - did not complete within timeout")
+	}
+}
+
+func TestNestedSchedulingScenarios(t *testing.T) {
+	s := newScheduler(time.Unix(0, 0))
+	var execCount Counter
+
+	// Test 1: Task scheduling another task in the same bucket
+	s.Run(func(time.Time, time.Duration) bool {
+		execCount.Inc()(time.Now(), 0)
+		s.Run(func(time.Time, time.Duration) bool {
+			execCount.Inc()(time.Now(), 0)
+			return false
+		})
+		return false
+	})
+
+	// Test 2: Task scheduling a recurring task
+	s.Run(func(time.Time, time.Duration) bool {
+		execCount.Inc()(time.Now(), 0)
+		s.RunEvery(func(time.Time, time.Duration) bool {
+			execCount.Inc()(time.Now(), 0)
+			return false // run only once
+		}, 10*time.Millisecond)
+		return false
+	})
+
+	// Execute multiple ticks to process all tasks
+	for i := 0; i < 5; i++ {
+		s.Tick()
 	}
 
-	bucket.mu.Unlock()
-	<-done
+	// Should have executed: 2 initial tasks + 2 nested tasks = 4 total
+	assert.Equal(t, 4, execCount.Value())
+}
+
+func TestFutureTasksRetained(t *testing.T) {
+	now := time.Unix(0, 0)
+	s := newScheduler(now)
+	var execLog Log
+
+	// Schedule tasks for different times
+	s.RunAt(execLog.Log("future1"), now.Add(50*time.Millisecond))  // should run on tick 5
+	s.RunAt(execLog.Log("future2"), now.Add(100*time.Millisecond)) // should run on tick 10
+	s.RunAt(execLog.Log("immediate"), now)                         // should run on first tick
+
+	// First tick - only immediate task should run
+	s.Tick()
+	assert.Equal(t, Log{"immediate"}, execLog)
+
+	// Advance to tick 5 - future1 should run
+	for i := 0; i < 5; i++ {
+		s.Tick()
+	}
+	assert.Equal(t, Log{"immediate", "future1"}, execLog)
+
+	// Advance to tick 10 - future2 should run
+	for i := 0; i < 5; i++ {
+		s.Tick()
+	}
+	assert.Equal(t, Log{"immediate", "future1", "future2"}, execLog)
 }
 
 // ----------------------------------------- Log -----------------------------------------
