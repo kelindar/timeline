@@ -16,28 +16,35 @@ import (
 	"github.com/kelindar/timeline"
 )
 
+const (
+	resolution = 10 * time.Millisecond
+	buckets    = int(time.Second / resolution)
+)
+
 // Scheduler is the default scheduler used to emit events.
 var Scheduler = func() *timeline.Scheduler {
 	s := timeline.New()
 	s.Start(context.Background())
+	s.RunEvery(func(now time.Time, elapsed time.Duration) bool {
+		idx := int(driverIdx.Add(1)-1) % buckets
+		wheels.Range(func(_ any, v any) bool {
+			v.(flushFunc)(idx, now, elapsed)
+			return true
+		})
+		return true
+	}, resolution)
 	return s
 }()
 
 // ----------------------------------------- Driver (time wheel) -----------------------------------------
 
-const driverResolution = 10 * time.Millisecond
-const numBuckets = int(time.Second / driverResolution)
-
 var (
-	driverOnce  sync.Once
 	driverIdx   atomic.Int32
-	wheels      sync.Map // map[uint32]*wheelEntry
+	wheels      sync.Map // map[uint32]flushFunc
 	typedWheels sync.Map // map[uint32]any (*wheel[T])
 )
 
-type wheelEntry struct {
-	flush func(idx int, now time.Time, elapsed time.Duration)
-}
+type flushFunc = func(idx int, now time.Time, elapsed time.Duration)
 
 type wheel[T event.Event] struct {
 	mu      sync.Mutex
@@ -47,19 +54,27 @@ type wheel[T event.Event] struct {
 
 func newTypedWheel[T event.Event]() *wheel[T] {
 	w := &wheel[T]{
-		buckets: make([][]T, numBuckets),
+		buckets: make([][]T, buckets),
 	}
-	for i := 0; i < numBuckets; i++ {
-		w.buckets[i] = make([]T, 0, 64)
+	for i := 0; i < buckets; i++ {
+		w.buckets[i] = make([]T, 0, 16)
 	}
 	return w
 }
 
-func (w *wheel[T]) enqueue(delta int, ev T) {
-	w.mu.Lock()
-	idx := (int(w.current) + delta) % numBuckets
-	w.buckets[idx] = append(w.buckets[idx], ev)
-	w.mu.Unlock()
+func wheelOf[T event.Event]() *wheel[T] {
+	key := hashOfT[T]()
+	if v, ok := typedWheels.Load(key); ok {
+		return v.(*wheel[T])
+	}
+
+	w := newTypedWheel[T]()
+	actual, loaded := typedWheels.LoadOrStore(key, w)
+	tw := actual.(*wheel[T])
+	if !loaded {
+		wheels.Store(key, tw.flush)
+	}
+	return tw
 }
 
 func (w *wheel[T]) flush(idx int, now time.Time, elapsed time.Duration) {
@@ -77,32 +92,12 @@ func (w *wheel[T]) flush(idx int, now time.Time, elapsed time.Duration) {
 	}
 }
 
-func wheelOf[T event.Event]() *wheel[T] {
-	key := hashOfT[T]()
-	if v, ok := typedWheels.Load(key); ok {
-		return v.(*wheel[T])
-	}
-
-	w := newTypedWheel[T]()
-	actual, loaded := typedWheels.LoadOrStore(key, w)
-	tw := actual.(*wheel[T])
-	if !loaded {
-		wheels.Store(key, &wheelEntry{flush: func(idx int, now time.Time, elapsed time.Duration) { tw.flush(idx, now, elapsed) }})
-	}
-	return tw
-}
-
-func ensureDriver() {
-	driverOnce.Do(func() {
-		Scheduler.RunEvery(func(now time.Time, elapsed time.Duration) bool {
-			idx := int(driverIdx.Add(1)-1) % numBuckets
-			wheels.Range(func(_ any, v any) bool {
-				v.(*wheelEntry).flush(idx, now, elapsed)
-				return true
-			})
-			return true
-		}, driverResolution)
-	})
+func emit[T event.Event](ev T, delta int) {
+	w := wheelOf[T]()
+	w.mu.Lock()
+	idx := (int(w.current) + delta) % buckets
+	w.buckets[idx] = append(w.buckets[idx], ev)
+	w.mu.Unlock()
 }
 
 // ----------------------------------------- Forward Event -----------------------------------------
@@ -195,31 +190,25 @@ func OnEvery(handler func(now time.Time, elapsed time.Duration) error, interval 
 
 // Next writes an event during the next tick.
 func Next[T event.Event](ev T) {
-	ensureDriver()
-	w := wheelOf[T]()
-	w.enqueue(1, ev)
+	emit(ev, 1)
 }
 
 // At writes an event at specific 'at' time.
 func At[T event.Event](ev T, at time.Time) {
-	ensureDriver()
-	w := wheelOf[T]()
-	delta := int(time.Until(at) / driverResolution)
+	delta := int(time.Until(at) / resolution)
 	if delta < 1 {
 		delta = 1
 	}
-	w.enqueue(delta, ev)
+	emit(ev, delta)
 }
 
 // After writes an event after a 'delay'.
 func After[T event.Event](ev T, after time.Duration) {
-	ensureDriver()
-	w := wheelOf[T]()
-	steps := int(after / driverResolution)
+	steps := int(after / resolution)
 	if steps < 1 {
 		steps = 1
 	}
-	w.enqueue(steps, ev)
+	emit(ev, steps)
 }
 
 // Every writes an event at 'interval' intervals, starting at the next boundary tick.
@@ -252,18 +241,6 @@ func Error(err error, about any) {
 		error: err,
 		About: about,
 	})
-}
-
-// emit creates an optimized task that avoids closure variable capture
-func emit[T event.Event](ev T) timeline.Task {
-	return func(now time.Time, elapsed time.Duration) bool {
-		event.Publish(event.Default, signal[T]{
-			Data:    ev,
-			Time:    now,
-			Elapsed: elapsed,
-		})
-		return true
-	}
 }
 
 // emitEvery creates a cancellable recurring event with optimized closure
