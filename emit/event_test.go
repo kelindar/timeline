@@ -2,6 +2,7 @@ package emit
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,19 +13,12 @@ import (
 /*
 go test -bench=. -benchmem -benchtime=10s
 cpu: 13th Gen Intel(R) Core(TM) i7-13700K
-BenchmarkEvent/1x1-24         	13259682	        84.58 ns/op	        11.73 million/s	     169 B/op	       1 allocs/op
-BenchmarkEvent/1x10-24        	16216171	       104.8 ns/op	        74.95 million/s	     249 B/op	       1 allocs/op
-BenchmarkEvent/1x100-24       	26087012	       669.5 ns/op	        70.51 million/s	     228 B/op	       1 allocs/op
-BenchmarkEvent/10x1-24        	 2721086	       510.1 ns/op	        18.33 million/s	     953 B/op	      10 allocs/op
-BenchmarkEvent/10x10-24       	 1000000	      1095 ns/op	        50.99 million/s	    2100 B/op	      10 allocs/op
-BenchmarkEvent/10x100-24      	 1000000	      1294 ns/op	        57.49 million/s	    2151 B/op	      10 allocs/op
-
-BenchmarkEvent/1x1-24         	49037835	        33.07 ns/op	        30.77 million/s	       0 B/op	       0 allocs/op
-BenchmarkEvent/1x10-24        	45575841	       171.6 ns/op	        67.16 million/s	       5 B/op	       0 allocs/op
-BenchmarkEvent/1x100-24       	28754475	       158.9 ns/op	        67.97 million/s	      14 B/op	       0 allocs/op
-BenchmarkEvent/10x1-24        	 5017671	       525.8 ns/op	        27.53 million/s	       5 B/op	       0 allocs/op
-BenchmarkEvent/10x10-24       	 1000000	      1755 ns/op	        62.31 million/s	     136 B/op	       0 allocs/op
-BenchmarkEvent/10x100-24      	 1000000	      2483 ns/op	        67.52 million/s	     216 B/op	       0 allocs/op
+BenchmarkEvent/1x1-24         	38276168	        52.62 ns/op	        16.73 million/s	       1 B/op	       0 allocs/op
+BenchmarkEvent/1x10-24        	33396972	        44.04 ns/op	        76.11 million/s	      12 B/op	       0 allocs/op
+BenchmarkEvent/1x100-24       	51144136	        57.30 ns/op	        68.87 million/s	      11 B/op	       0 allocs/op
+BenchmarkEvent/10x1-24        	 5557052	       233.7 ns/op	        35.14 million/s	      15 B/op	       0 allocs/op
+BenchmarkEvent/10x10-24       	 2334117	       591.7 ns/op	        71.55 million/s	      81 B/op	       0 allocs/op
+BenchmarkEvent/10x100-24      	 1893919	       714.5 ns/op	        63.44 million/s	     116 B/op	       0 allocs/op
 */
 func BenchmarkEvent(b *testing.B) {
 	for _, topics := range []int{1, 10} {
@@ -153,6 +147,23 @@ func TestEveryCancel(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	assert.LessOrEqual(t, count.Load(), int32(1), "No events should have been emitted after cancel")
+}
+
+func TestStress(t *testing.T) {
+	const count = 1000000
+
+	var wg sync.WaitGroup
+	wg.Add(count)
+	defer OnType(1234, func(ev Dynamic, now time.Time, elapsed time.Duration) error {
+		wg.Done()
+		return nil
+	})()
+
+	for i := 0; i < count; i++ {
+		Next(Dynamic{ID: 1234})
+	}
+
+	wg.Wait()
 }
 
 // ------------------------------------- Test Events -------------------------------------

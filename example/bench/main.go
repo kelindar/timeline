@@ -11,15 +11,15 @@ import (
 
 func main() {
 	bench.Run(benchmark,
-		bench.WithDuration(2*time.Millisecond),
-		bench.WithSamples(1000),
+		bench.WithDuration(5*time.Millisecond),
+		bench.WithSamples(200),
 	)
 }
 
 func benchmark(b *bench.B) {
 	s := timeline.New()
 	var counter atomic.Uint64
-	const batch = 10
+	const batch = 100
 
 	emit.On(func(event *ByPointer, now time.Time, elapsed time.Duration) error {
 		counter.Add(1)

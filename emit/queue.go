@@ -102,9 +102,9 @@ func (q *Queue[T]) Drain(now time.Time, elapsed time.Duration) bool {
 			return true
 		}
 
-		// Move to next segment and recycle the current one
+		// Move to next segment and reset the current one
 		q.tail = nextSeg
-		q.recycleSegment(segment)
+		q.reset(segment)
 	}
 }
 
@@ -118,7 +118,7 @@ func (q *Queue[T]) newSegment() *segment[T] {
 	return seg
 }
 
-func (q *Queue[T]) recycleSegment(seg *segment[T]) {
+func (q *Queue[T]) reset(seg *segment[T]) {
 	// Clear the segment data for GC
 	var zero T
 	for i := range seg.data {
