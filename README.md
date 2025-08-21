@@ -78,6 +78,13 @@ Task executed at 14.000, elapsed=1s
 The [github.com/kelindar/timeline/emit](https://github.com/kelindar/timeline/tree/main/emit) sub-package seamlessly integrates the timeline scheduler with event-driven programming. It allows you to emit and subscribe to events with precise timing, making it ideal for applications that require both event-driven architectures and time-based scheduling.
 
 ```go
+import (
+	"fmt"
+	"time"
+	
+	"github.com/kelindar/timeline/emit"
+)
+
 // Custom event type
 type Message struct {
 	Text string
@@ -91,19 +98,23 @@ func (Message) Type() uint32 {
 func main() {
 
 	// Emit the event immediately
-	event.Next(Message{Text: "Hello, World!"})
-
-	// Emit the event every second
-	event.Every(Message{Text: "Are we there yet?"}, 500*time.Millisecond)
+	emit.Next(Message{Text: "Hello, World!"})
 
 	// Subscribe and Handle the Event
-	cancel := event.On(func(ev Message, now time.Time, elapsed time.Duration) error {
+	cancel := emit.On(func(ev Message, now time.Time, elapsed time.Duration) error {
 		fmt.Printf("Received '%s' at %02d.%03d, elapsed=%v\n",
 			ev.Text,
 			now.Second(), now.UnixMilli()%1000, elapsed)
 		return nil
 	})
 	defer cancel() // Remember to unsubscribe when done
+
+	// Schedule recurring events using OnEvery
+	cancelTimer := emit.OnEvery(func(now time.Time, elapsed time.Duration) error {
+		emit.Next(Message{Text: "Are we there yet?"})
+		return nil
+	}, 500*time.Millisecond)
+	defer cancelTimer() // Stop the recurring timer
 
 	// Let the program run for a while to receive events
 	time.Sleep(5 * time.Second)
@@ -125,4 +136,3 @@ Received 'Are we there yet?' at 23.500, elapsed=500ms
 Received 'Are we there yet?' at 24.000, elapsed=500ms
 Received 'Are we there yet?' at 24.500, elapsed=500ms
 ```
-

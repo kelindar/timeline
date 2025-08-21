@@ -26,12 +26,12 @@ func benchmark(b *bench.B) {
 		return nil
 	})
 
-	emit.On(func(event ByValue, now time.Time, elapsed time.Duration) error {
+	emit.On(func(event Event, now time.Time, elapsed time.Duration) error {
 		counter.Add(1)
 		return nil
 	})
 
-	b.RunN("timeline-next", func(i int) int {
+	b.RunN("task-next", func(i int) int {
 		for i := 0; i < batch; i++ {
 			s.Run(func(now time.Time, elapsed time.Duration) bool {
 				counter.Add(1)
@@ -42,7 +42,7 @@ func benchmark(b *bench.B) {
 		return batch
 	})
 
-	b.RunN("timeline-after", func(i int) int {
+	b.RunN("task-after", func(i int) int {
 		for i := 0; i < batch; i++ {
 			s.RunAfter(func(now time.Time, elapsed time.Duration) bool {
 				counter.Add(1)
@@ -53,17 +53,18 @@ func benchmark(b *bench.B) {
 		return batch
 	})
 
-	b.RunN("emit-next-ptr", func(i int) int {
+	b.RunN("emit-next", func(i int) int {
 		for i := 0; i < batch; i++ {
-			emit.Next(&ByPointer{Number: i, String: "test"})
+			emit.Next(Event{Number: i, String: "test"})
 		}
 		return batch
 	})
 
-	b.RunN("emit-next-val", func(i int) int {
+	b.RunN("emit-after", func(i int) int {
 		for i := 0; i < batch; i++ {
-			emit.Next(ByValue{Number: i, String: "test"})
+			emit.After(Event{Number: i, String: "test"}, time.Duration(10*i)*time.Millisecond)
 		}
+		emit.Default.Tick()
 		return batch
 	})
 
@@ -78,11 +79,11 @@ func (t *ByPointer) Type() uint32 {
 	return 0x01
 }
 
-type ByValue struct {
+type Event struct {
 	Number int
 	String string
 }
 
-func (t ByValue) Type() uint32 {
+func (t Event) Type() uint32 {
 	return 0x02
 }
