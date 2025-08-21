@@ -2,6 +2,7 @@ package emit
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,12 +13,12 @@ import (
 /*
 go test -bench=. -benchmem -benchtime=10s
 cpu: 13th Gen Intel(R) Core(TM) i7-13700K
-BenchmarkEvent/1x1-24         	13259682	        84.58 ns/op	        11.73 million/s	     169 B/op	       1 allocs/op
-BenchmarkEvent/1x10-24        	16216171	       104.8 ns/op	        74.95 million/s	     249 B/op	       1 allocs/op
-BenchmarkEvent/1x100-24       	26087012	       669.5 ns/op	        70.51 million/s	     228 B/op	       1 allocs/op
-BenchmarkEvent/10x1-24        	 2721086	       510.1 ns/op	        18.33 million/s	     953 B/op	      10 allocs/op
-BenchmarkEvent/10x10-24       	 1000000	      1095 ns/op	        50.99 million/s	    2100 B/op	      10 allocs/op
-BenchmarkEvent/10x100-24      	 1000000	      1294 ns/op	        57.49 million/s	    2151 B/op	      10 allocs/op
+BenchmarkEvent/1x1-24         	49567932	        23.05 ns/op	        29.03 million/s	       3 B/op	       0 allocs/op
+BenchmarkEvent/1x10-24        	57662643	        23.18 ns/op	        60.29 million/s	       8 B/op	       0 allocs/op
+BenchmarkEvent/1x100-24       	60567517	        54.51 ns/op	        72.32 million/s	      10 B/op	       0 allocs/op
+BenchmarkEvent/10x1-24        	 5801366	       224.5 ns/op	        49.58 million/s	      86 B/op	       0 allocs/op
+BenchmarkEvent/10x10-24       	 5055789	       218.1 ns/op	        81.23 million/s	     108 B/op	       0 allocs/op
+BenchmarkEvent/10x100-24      	 2404316	       512.2 ns/op	        71.51 million/s	     125 B/op	       0 allocs/op
 */
 func BenchmarkEvent(b *testing.B) {
 	for _, topics := range []int{1, 10} {
@@ -63,19 +64,7 @@ func TestEmit(t *testing.T) {
 	Next(MyEvent2{Text: "Hello"})
 	<-events
 
-	At(MyEvent2{Text: "Hello"}, time.Now().Add(40*time.Millisecond))
-	<-events
-
 	After(MyEvent2{Text: "Hello"}, 20*time.Millisecond)
-	<-events
-
-	EveryAt(MyEvent2{Text: "Hello"}, 50*time.Millisecond, time.Now().Add(10*time.Millisecond))
-	<-events
-
-	EveryAfter(MyEvent2{Text: "Hello"}, 30*time.Millisecond, 10*time.Millisecond)
-	<-events
-
-	Every(MyEvent2{Text: "Hello"}, 10*time.Millisecond)
 	<-events
 }
 
@@ -127,37 +116,34 @@ func TestOnTypeError(t *testing.T) {
 	assert.Equal(t, "OnType()", (<-errors).Error())
 }
 
-func TestOnEvery(t *testing.T) {
-	events := make(chan MyEvent2)
-	defer OnEvery(func(now time.Time, elapsed time.Duration) error {
-		events <- MyEvent2{}
+func TestOnEveryCancel(t *testing.T) {
+	var count atomic.Int32
+	cancel := OnEvery(func(now time.Time, elapsed time.Duration) error {
+		count.Add(1)
 		return nil
-	}, 20*time.Millisecond)()
+	}, 10*time.Millisecond)
 
-	// Emit the event
-	<-events
-	<-events
-	<-events
+	cancel()
+
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, 1, int(count.Load()))
 }
 
-func TestEveryCancel(t *testing.T) {
-	var count atomic.Int32
-	defer On(func(ev MyEvent2, now time.Time, elapsed time.Duration) error {
-		// Only count events that belong to this test
-		if ev.Text == "TestEveryCancel" {
-			count.Add(1)
-		}
+func TestStress(t *testing.T) {
+	const count = 10000
+
+	var wg sync.WaitGroup
+	wg.Add(count)
+	defer OnType(1234, func(ev Dynamic, now time.Time, elapsed time.Duration) error {
+		wg.Done()
 		return nil
 	})()
 
-	// Start recurring event
-	cancel := Every(MyEvent2{Text: "TestEveryCancel"}, 20*time.Millisecond)
-	cancel()
+	for i := 0; i < count; i++ {
+		Next(Dynamic{ID: 1234})
+	}
 
-	// Wait a bit to ensure no more events come
-	time.Sleep(100 * time.Millisecond)
-
-	assert.LessOrEqual(t, count.Load(), int32(1), "No events should have been emitted after cancel")
+	wg.Wait()
 }
 
 // ------------------------------------- Test Events -------------------------------------
