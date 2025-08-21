@@ -42,11 +42,11 @@ func queueOf[T event.Event](s *Scheduler, eventType uint32) *queue[T] {
 	}
 
 	actual, loaded := s.queues.LoadOrStore(eventType, newQueue[T]())
-	w := actual.(*queue[T])
+	q := actual.(*queue[T])
 	if !loaded {
-		s.RunEvery(w.Drain, resolution)
+		s.RunEvery(q.Drain, resolution)
 	}
-	return w
+	return q
 }
 
 // ----------------------------------------- Forward Event -----------------------------------------
@@ -120,35 +120,38 @@ func OnError(handler func(err error, about any)) context.CancelFunc {
 
 // OnEvery creates a timer that fires every 'interval' and calls the handler.
 func OnEvery(handler func(now time.Time, elapsed time.Duration) error, interval time.Duration) context.CancelFunc {
-	id := atomic.AddUint32(&nextTimerID, 1)
-	if id >= (math.MaxUint32 - 1) {
-		panic("emit: too many timers created")
+	var cancelled atomic.Bool
+	Default.RunEvery(func(now time.Time, elapsed time.Duration) bool {
+		if err := handler(now, elapsed); err != nil {
+			Error(err, nil)
+		}
+
+		return !cancelled.Load()
+	}, interval)
+
+	return func() {
+		cancelled.Store(true)
 	}
-
-	// Subscribe to the timer event
-	cancel := OnType(id, func(_ Timer, now time.Time, elapsed time.Duration) error {
-		return handler(now, elapsed)
-	})
-
-	// Start the timer
-	Every(Timer{ID: id}, interval)
-	return cancel
 }
 
 // ----------------------------------------- Publish -----------------------------------------
 
-// Next writes an event during the next tick.
+// Next writes an event during the next tick. Zero allocation.
 func Next[T event.Event](ev T) {
-	w := queueOf[T](Default, ev.Type())
-	w.Push(ev)
+	q := queueOf[T](Default, ev.Type())
+	q.Push(ev)
 }
 
-// Every writes an event at 'interval' intervals, starting at the next boundary tick.
-// Returns a cancel function to stop the recurring event.
-func Every[T event.Event](ev T, interval time.Duration) context.CancelFunc {
-	return emitEvery(ev, interval, func(task timeline.Task, interval time.Duration) {
-		Default.RunEvery(task, interval)
-	})
+// After writes an event after the specified delay. This one allocates a closure.
+func After[T event.Event](ev T, delay time.Duration) {
+	Default.RunAfter(func(now time.Time, elapsed time.Duration) bool {
+		event.Publish(event.Default, signal[T]{
+			Data:    ev,
+			Time:    now,
+			Elapsed: elapsed,
+		})
+		return true
+	}, delay)
 }
 
 // Error writes an error event.
@@ -157,22 +160,4 @@ func Error(err error, about any) {
 		error: err,
 		About: about,
 	})
-}
-
-// emitEvery creates a cancellable recurring event with optimized closure
-func emitEvery[T event.Event](ev T, interval time.Duration, scheduler func(timeline.Task, time.Duration)) func() {
-	var cancelled atomic.Bool
-	task := func(now time.Time, elapsed time.Duration) bool {
-		event.Publish(event.Default, signal[T]{
-			Data:    ev,
-			Time:    now,
-			Elapsed: elapsed,
-		})
-		return !cancelled.Load()
-	}
-
-	scheduler(task, interval)
-	return func() {
-		cancelled.Store(true)
-	}
 }

@@ -64,8 +64,7 @@ func TestEmit(t *testing.T) {
 	Next(MyEvent2{Text: "Hello"})
 	<-events
 
-	cancel := Every(MyEvent2{Text: "Hello"}, 10*time.Millisecond)
-	defer cancel()
+	After(MyEvent2{Text: "Hello"}, 20*time.Millisecond)
 	<-events
 }
 
@@ -117,37 +116,17 @@ func TestOnTypeError(t *testing.T) {
 	assert.Equal(t, "OnType()", (<-errors).Error())
 }
 
-func TestOnEvery(t *testing.T) {
-	events := make(chan MyEvent2)
-	defer OnEvery(func(now time.Time, elapsed time.Duration) error {
-		events <- MyEvent2{}
-		return nil
-	}, 20*time.Millisecond)()
-
-	// Emit the event
-	<-events
-	<-events
-	<-events
-}
-
-func TestEveryCancel(t *testing.T) {
+func TestOnEveryCancel(t *testing.T) {
 	var count atomic.Int32
-	defer On(func(ev MyEvent2, now time.Time, elapsed time.Duration) error {
-		// Only count events that belong to this test
-		if ev.Text == "TestEveryCancel" {
-			count.Add(1)
-		}
+	cancel := OnEvery(func(now time.Time, elapsed time.Duration) error {
+		count.Add(1)
 		return nil
-	})()
+	}, 10*time.Millisecond)
 
-	// Start recurring event
-	cancel := Every(MyEvent2{Text: "TestEveryCancel"}, 20*time.Millisecond)
 	cancel()
 
-	// Wait a bit to ensure no more events come
 	time.Sleep(100 * time.Millisecond)
-
-	assert.LessOrEqual(t, count.Load(), int32(1), "No events should have been emitted after cancel")
+	assert.Equal(t, 1, int(count.Load()))
 }
 
 func TestStress(t *testing.T) {
