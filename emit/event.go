@@ -30,6 +30,16 @@ var Default = func() *Scheduler {
 		Scheduler: timeline.New(),
 	}
 
+	// Drain all queues every resolution
+	s.RunEvery(func(now time.Time, elapsed time.Duration) bool {
+		s.queues.Range(func(_, queue any) bool {
+			queue.(interface {
+				Drain(now time.Time, elapsed time.Duration) bool
+			}).Drain(now, elapsed)
+			return true
+		})
+		return true
+	}, resolution)
 	s.Start(context.Background())
 	return s
 }()
@@ -41,12 +51,8 @@ func queueOf[T event.Event](s *Scheduler, eventType uint32) *queue[T] {
 		return v.(*queue[T])
 	}
 
-	actual, loaded := s.queues.LoadOrStore(eventType, newQueue[T]())
-	q := actual.(*queue[T])
-	if !loaded {
-		s.RunEvery(q.Drain, resolution)
-	}
-	return q
+	actual, _ := s.queues.LoadOrStore(eventType, newQueue[T]())
+	return actual.(*queue[T])
 }
 
 // ----------------------------------------- Subscribe -----------------------------------------

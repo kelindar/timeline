@@ -6,9 +6,12 @@ import (
 	"time"
 
 	"github.com/kelindar/event"
+	"github.com/kelindar/timeline"
 )
 
 const segmentSize = 64
+
+var _ timeline.Task = (*queue[fault])(nil).Drain
 
 // segment represents a fixed-size buffer that holds events
 type segment[T any] struct {
