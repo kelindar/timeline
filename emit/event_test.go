@@ -63,18 +63,6 @@ func TestEmit(t *testing.T) {
 	Next(MyEvent2{Text: "Hello"})
 	<-events
 
-	At(MyEvent2{Text: "Hello"}, time.Now().Add(40*time.Millisecond))
-	<-events
-
-	After(MyEvent2{Text: "Hello"}, 20*time.Millisecond)
-	<-events
-
-	EveryAt(MyEvent2{Text: "Hello"}, 50*time.Millisecond, time.Now().Add(10*time.Millisecond))
-	<-events
-
-	EveryAfter(MyEvent2{Text: "Hello"}, 30*time.Millisecond, 10*time.Millisecond)
-	<-events
-
 	Every(MyEvent2{Text: "Hello"}, 10*time.Millisecond)
 	<-events
 }

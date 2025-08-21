@@ -18,86 +18,63 @@ import (
 
 const (
 	resolution = 10 * time.Millisecond
-	buckets    = int(time.Second / resolution)
 )
 
 // Scheduler is the default scheduler used to emit events.
 var Scheduler = func() *timeline.Scheduler {
 	s := timeline.New()
 	s.Start(context.Background())
-	s.RunEvery(func(now time.Time, elapsed time.Duration) bool {
-		idx := int(driverIdx.Add(1)-1) % buckets
-		wheels.Range(func(_ any, v any) bool {
-			v.(flushFunc)(idx, now, elapsed)
-			return true
-		})
-		return true
-	}, resolution)
 	return s
 }()
 
-// ----------------------------------------- Driver (time wheel) -----------------------------------------
+// ----------------------------------------- Queues -----------------------------------------
 
 var (
-	driverIdx   atomic.Int32
-	wheels      sync.Map // map[uint32]flushFunc
-	typedWheels sync.Map // map[uint32]any (*wheel[T])
+	queues sync.Map // map[uint32]any (*queue[T])
 )
 
-type flushFunc = func(idx int, now time.Time, elapsed time.Duration)
-
-type wheel[T event.Event] struct {
-	mu      sync.Mutex
-	current uint32 // Current tick position for this wheel
-	buckets [][]T
+func newQueue[T event.Event]() *Queue[T] {
+	return NewQueue[T]()
 }
 
-func newTypedWheel[T event.Event]() *wheel[T] {
-	w := &wheel[T]{
-		buckets: make([][]T, buckets),
+func queueOf[T event.Event]() *Queue[T] {
+	key := hashOfT[T]()
+	if v, ok := queues.Load(key); ok {
+		return v.(*Queue[T])
 	}
-	for i := 0; i < buckets; i++ {
-		w.buckets[i] = make([]T, 0, 16)
+
+	actual, loaded := queues.LoadOrStore(key, newQueue[T]())
+	w := actual.(*Queue[T])
+	if !loaded {
+		Scheduler.RunEvery(w.flush, resolution)
 	}
 	return w
 }
 
-func wheelOf[T event.Event]() *wheel[T] {
-	key := hashOfT[T]()
-	if v, ok := typedWheels.Load(key); ok {
-		return v.(*wheel[T])
-	}
-
-	w := newTypedWheel[T]()
-	actual, loaded := typedWheels.LoadOrStore(key, w)
-	tw := actual.(*wheel[T])
-	if !loaded {
-		wheels.Store(key, tw.flush)
-	}
-	return tw
-}
-
-func (w *wheel[T]) flush(idx int, now time.Time, elapsed time.Duration) {
-	w.mu.Lock()
-	w.current = uint32(idx) // Update wheel's current position
-	batch := w.buckets[idx]
-	w.buckets[idx] = w.buckets[idx][:0]
-	w.mu.Unlock()
-	for i := range batch {
+func (w *Queue[T]) flush(now time.Time, elapsed time.Duration) bool {
+	w.Drain(func(ev T) bool {
 		event.Publish(event.Default, signal[T]{
-			Data:    batch[i],
+			Data:    ev,
 			Time:    now,
 			Elapsed: elapsed,
 		})
-	}
+		return true
+	})
+
+	/*	for i := range w.queue {
+			event.Publish(event.Default, signal[T]{
+				Data:    w.queue[i],
+				Time:    now,
+				Elapsed: elapsed,
+			})
+		}
+		w.queue = w.queue[:0]*/
+	return true
 }
 
-func emit[T event.Event](ev T, delta int) {
-	w := wheelOf[T]()
-	w.mu.Lock()
-	idx := (int(w.current) + delta) % buckets
-	w.buckets[idx] = append(w.buckets[idx], ev)
-	w.mu.Unlock()
+func emit[T event.Event](ev T) {
+	w := queueOf[T]()
+	w.Push(ev)
 }
 
 // ----------------------------------------- Forward Event -----------------------------------------
@@ -190,25 +167,7 @@ func OnEvery(handler func(now time.Time, elapsed time.Duration) error, interval 
 
 // Next writes an event during the next tick.
 func Next[T event.Event](ev T) {
-	emit(ev, 1)
-}
-
-// At writes an event at specific 'at' time.
-func At[T event.Event](ev T, at time.Time) {
-	delta := int(time.Until(at) / resolution)
-	if delta < 1 {
-		delta = 1
-	}
-	emit(ev, delta)
-}
-
-// After writes an event after a 'delay'.
-func After[T event.Event](ev T, after time.Duration) {
-	steps := int(after / resolution)
-	if steps < 1 {
-		steps = 1
-	}
-	emit(ev, steps)
+	emit(ev)
 }
 
 // Every writes an event at 'interval' intervals, starting at the next boundary tick.
@@ -216,22 +175,6 @@ func After[T event.Event](ev T, after time.Duration) {
 func Every[T event.Event](ev T, interval time.Duration) context.CancelFunc {
 	return emitEvery(ev, interval, func(task timeline.Task, interval time.Duration) {
 		Scheduler.RunEvery(task, interval)
-	})
-}
-
-// EveryAt writes an event at 'interval' intervals, starting at 'startTime'.
-// Returns a cancel function to stop the recurring event.
-func EveryAt[T event.Event](ev T, interval time.Duration, startTime time.Time) context.CancelFunc {
-	return emitEvery(ev, interval, func(task timeline.Task, interval time.Duration) {
-		Scheduler.RunEveryAt(task, interval, startTime)
-	})
-}
-
-// EveryAfter writes an event at 'interval' intervals after a 'delay'.
-// Returns a cancel function to stop the recurring event.
-func EveryAfter[T event.Event](ev T, interval time.Duration, delay time.Duration) context.CancelFunc {
-	return emitEvery(ev, interval, func(task timeline.Task, interval time.Duration) {
-		Scheduler.RunEveryAfter(task, interval, delay)
 	})
 }
 

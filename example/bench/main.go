@@ -11,8 +11,8 @@ import (
 
 func main() {
 	bench.Run(benchmark,
-		bench.WithDuration(5*time.Millisecond),
-		bench.WithSamples(100),
+		bench.WithDuration(2*time.Millisecond),
+		bench.WithSamples(1000),
 	)
 }
 
@@ -57,15 +57,6 @@ func benchmark(b *bench.B) {
 		for i := 0; i < batch; i++ {
 			emit.Next(&ByPointer{Number: i, String: "test"})
 		}
-		s.Tick()
-		return batch
-	})
-
-	b.RunN("emit-after-ptr", func(i int) int {
-		for i := 0; i < batch; i++ {
-			emit.After(&ByPointer{Number: i, String: "test"}, time.Duration(10*i)*time.Millisecond)
-		}
-		s.Tick()
 		return batch
 	})
 
@@ -73,15 +64,6 @@ func benchmark(b *bench.B) {
 		for i := 0; i < batch; i++ {
 			emit.Next(ByValue{Number: i, String: "test"})
 		}
-		s.Tick()
-		return batch
-	})
-
-	b.RunN("emit-after-val", func(i int) int {
-		for i := 0; i < batch; i++ {
-			emit.After(ByValue{Number: i, String: "test"}, time.Duration(10*i)*time.Millisecond)
-		}
-		s.Tick()
 		return batch
 	})
 
