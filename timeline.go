@@ -67,13 +67,6 @@ func (s sched) Recurring() bool {
 	return (uint64(s)>>recurringBit)&1 == 1
 }
 
-// WithRunAt creates a new scheduleData with updated runAt time
-func (s sched) WithRunAt(runAt tick) sched {
-	newData := uint64(s) & ^uint64(runAtMask) // Clear runAt bits
-	newData |= uint64(runAt) << intervalBits & runAtMask
-	return sched(newData)
-}
-
 // bucket represents a bucket for a particular window of the second.
 type bucket struct {
 	mu    sync.Mutex
@@ -195,7 +188,6 @@ func (s *Scheduler) Tick() time.Time {
 		switch {
 		case repeat && s.bucketOf(nextTick) == s.bucketOf(tickNow):
 			bucket.mu.Lock()
-			task.sched = task.sched.WithRunAt(nextTick)
 			bucket.queue = append(bucket.queue, task)
 			bucket.mu.Unlock()
 		case repeat: // different bucket
