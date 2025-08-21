@@ -3,6 +3,7 @@ package emit
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/kelindar/event"
 )
@@ -72,11 +73,9 @@ func (q *Queue[T]) Push(v T) {
 	}
 }
 
-// Drain calls f for each available element, stopping early if f returns false.
-// Single-consumer only. Optimized for bulk processing.
-func (q *Queue[T]) Drain(f func(T) bool) {
+// Drain is called by the scheduler to publish events, single-consumer only.
+func (q *Queue[T]) Drain(now time.Time, elapsed time.Duration) bool {
 	var zero T
-
 	for {
 		// Process all available data in current tail segment in bulk
 		segment := q.tail
@@ -87,16 +86,20 @@ func (q *Queue[T]) Drain(f func(T) bool) {
 			val := segment.data[segment.read]
 			segment.data[segment.read] = zero // clear for GC
 			segment.read++
-			if !f(val) {
-				return
-			}
+
+			// Publish the event
+			event.Publish(event.Default, signal[T]{
+				Data:    val,
+				Time:    now,
+				Elapsed: elapsed,
+			})
 		}
 
 		// Current segment is exhausted, try to move to next
 		nextSeg := segment.next.Load()
 		if nextSeg == nil {
 			// No more segments, queue is empty
-			return
+			return true
 		}
 
 		// Move to next segment and recycle the current one

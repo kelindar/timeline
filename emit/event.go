@@ -46,30 +46,9 @@ func queueOf[T event.Event]() *Queue[T] {
 	actual, loaded := queues.LoadOrStore(key, newQueue[T]())
 	w := actual.(*Queue[T])
 	if !loaded {
-		Scheduler.RunEvery(w.flush, resolution)
+		Scheduler.RunEvery(w.Drain, resolution)
 	}
 	return w
-}
-
-func (w *Queue[T]) flush(now time.Time, elapsed time.Duration) bool {
-	w.Drain(func(ev T) bool {
-		event.Publish(event.Default, signal[T]{
-			Data:    ev,
-			Time:    now,
-			Elapsed: elapsed,
-		})
-		return true
-	})
-
-	/*	for i := range w.queue {
-			event.Publish(event.Default, signal[T]{
-				Data:    w.queue[i],
-				Time:    now,
-				Elapsed: elapsed,
-			})
-		}
-		w.queue = w.queue[:0]*/
-	return true
 }
 
 func emit[T event.Event](ev T) {

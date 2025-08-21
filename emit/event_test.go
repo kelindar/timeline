@@ -18,6 +18,13 @@ BenchmarkEvent/1x100-24       	26087012	       669.5 ns/op	        70.51 million
 BenchmarkEvent/10x1-24        	 2721086	       510.1 ns/op	        18.33 million/s	     953 B/op	      10 allocs/op
 BenchmarkEvent/10x10-24       	 1000000	      1095 ns/op	        50.99 million/s	    2100 B/op	      10 allocs/op
 BenchmarkEvent/10x100-24      	 1000000	      1294 ns/op	        57.49 million/s	    2151 B/op	      10 allocs/op
+
+BenchmarkEvent/1x1-24         	49037835	        33.07 ns/op	        30.77 million/s	       0 B/op	       0 allocs/op
+BenchmarkEvent/1x10-24        	45575841	       171.6 ns/op	        67.16 million/s	       5 B/op	       0 allocs/op
+BenchmarkEvent/1x100-24       	28754475	       158.9 ns/op	        67.97 million/s	      14 B/op	       0 allocs/op
+BenchmarkEvent/10x1-24        	 5017671	       525.8 ns/op	        27.53 million/s	       5 B/op	       0 allocs/op
+BenchmarkEvent/10x10-24       	 1000000	      1755 ns/op	        62.31 million/s	     136 B/op	       0 allocs/op
+BenchmarkEvent/10x100-24      	 1000000	      2483 ns/op	        67.52 million/s	     216 B/op	       0 allocs/op
 */
 func BenchmarkEvent(b *testing.B) {
 	for _, topics := range []int{1, 10} {
