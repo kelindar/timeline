@@ -15,50 +15,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var counter atomic.Uint64
-
-/*
-cpu: 13th Gen Intel(R) Core(TM) i7-13700K
-BenchmarkRun/next-24         	11874015	       100.4 ns/op	        11.79 million/op	     117 B/op	       0 allocs/op
-BenchmarkRun/after-24        	   10000	    471016 ns/op	         0.9101 million/op	    1469 B/op	       0 allocs/op
-*/
-func BenchmarkRun(b *testing.B) {
-	work := func(time.Time, time.Duration) bool {
-		counter.Add(1)
-		return true
-	}
-
-	b.Run("next", func(b *testing.B) {
-		counter.Store(0)
-		s := New()
-		s.Start(context.Background())
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for n := 0; n < b.N; n++ {
-			s.Run(work)
-		}
-
-		b.ReportMetric(float64(counter.Load())/1000000, "million/op")
-	})
-
-	b.Run("after", func(b *testing.B) {
-		counter.Store(0)
-		s := New()
-		s.Start(context.Background())
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for n := 0; n < b.N; n++ {
-			for i := 0; i < 100; i++ {
-				s.RunAfter(work, time.Duration(10*i)*time.Millisecond)
-			}
-		}
-
-		b.ReportMetric(float64(counter.Load())/1000000, "million/op")
-	})
-}
-
 func TestRunAt(t *testing.T) {
 	now := time.Unix(0, 0)
 	log := make(Log, 0, 8)

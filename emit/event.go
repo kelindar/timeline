@@ -66,7 +66,7 @@ func (e Timer) Type() uint32 {
 // On subscribes to an event, the type of the event will be automatically
 // inferred from the provided type. Must be constant for this to work.
 func On[T event.Event](handler func(event T, now time.Time, elapsed time.Duration) error) context.CancelFunc {
-	return event.Subscribe[signal[T]](event.Default, func(m signal[T]) {
+	return event.Subscribe(event.Default, func(m signal[T]) {
 		if err := handler(m.Data, m.Time, m.Elapsed); err != nil {
 			Error(err, m.Data)
 		}
@@ -75,7 +75,7 @@ func On[T event.Event](handler func(event T, now time.Time, elapsed time.Duratio
 
 // OnType subscribes to an event with the specified event type.
 func OnType[T event.Event](eventType uint32, handler func(event T, now time.Time, elapsed time.Duration) error) context.CancelFunc {
-	return event.SubscribeTo[signal[T]](event.Default, eventType, func(m signal[T]) {
+	return event.SubscribeTo(event.Default, eventType, func(m signal[T]) {
 		if err := handler(m.Data, m.Time, m.Elapsed); err != nil {
 			Error(err, m.Data)
 		}
@@ -84,7 +84,7 @@ func OnType[T event.Event](eventType uint32, handler func(event T, now time.Time
 
 // OnError subscribes to an error event.
 func OnError(handler func(err error, about any)) context.CancelFunc {
-	return event.Subscribe[fault](event.Default, func(m fault) {
+	return event.Subscribe(event.Default, func(m fault) {
 		handler(m.error, m.About)
 	})
 }
@@ -97,7 +97,7 @@ func OnEvery(handler func(now time.Time, elapsed time.Duration) error, interval 
 	}
 
 	// Subscribe to the timer event
-	cancel := OnType[Timer](id, func(_ Timer, now time.Time, elapsed time.Duration) error {
+	cancel := OnType(id, func(_ Timer, now time.Time, elapsed time.Duration) error {
 		return handler(now, elapsed)
 	})
 

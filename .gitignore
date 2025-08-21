@@ -1,0 +1,5 @@
+*.prof
+*.test
+*.exe
+bench.gob
+bench.json
