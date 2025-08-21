@@ -20,6 +20,7 @@ type segment[T any] struct {
 
 // Queue is a multiple-producer, single-consumer queue for values of type T.
 // Uses a linked list of fixed-size segments to minimize contention.
+// Optimized for Push/Drain usage pattern.
 type Queue[T event.Event] struct {
 	head atomic.Pointer[segment[T]] // producers write to head segment
 	tail *segment[T]                // consumer reads from tail segment
@@ -71,69 +72,37 @@ func (q *Queue[T]) Push(v T) {
 	}
 }
 
-// Pop must be called by a single goroutine.
-// Returns zero value and false if empty.
-func (q *Queue[T]) Pop() (T, bool) {
+// Drain calls f for each available element, stopping early if f returns false.
+// Single-consumer only. Optimized for bulk processing.
+func (q *Queue[T]) Drain(f func(T) bool) {
 	var zero T
 
 	for {
-		// Check if current tail segment has data
-		if q.tail.read < q.tail.write.Load() {
-			val := q.tail.data[q.tail.read]
-			q.tail.data[q.tail.read] = zero // clear for GC
-			q.tail.read++
-			return val, true
+		// Process all available data in current tail segment in bulk
+		segment := q.tail
+		writePos := segment.write.Load()
+
+		// Process all items in this segment
+		for segment.read < writePos {
+			val := segment.data[segment.read]
+			segment.data[segment.read] = zero // clear for GC
+			segment.read++
+			if !f(val) {
+				return
+			}
 		}
 
 		// Current segment is exhausted, try to move to next
-		nextSeg := q.tail.next.Load()
+		nextSeg := segment.next.Load()
 		if nextSeg == nil {
 			// No more segments, queue is empty
-			return zero, false
+			return
 		}
 
 		// Move to next segment and recycle the current one
-		oldTail := q.tail
 		q.tail = nextSeg
-		q.recycleSegment(oldTail)
+		q.recycleSegment(segment)
 	}
-}
-
-// Drain calls f for each available element, stopping early if f returns false.
-// Single-consumer only.
-func (q *Queue[T]) Drain(f func(T) bool) {
-	for {
-		v, ok := q.Pop()
-		if !ok {
-			return
-		}
-		if !f(v) {
-			return
-		}
-	}
-}
-
-// Empty is an approximate check.
-func (q *Queue[T]) Empty() bool {
-	return q.tail.read >= q.tail.write.Load() && q.tail.next.Load() == nil
-}
-
-// LenApprox is a best-effort size estimate.
-func (q *Queue[T]) LenApprox() int {
-	count := 0
-
-	// Count items in tail segment
-	tailWrite := q.tail.write.Load()
-	if tailWrite > q.tail.read {
-		count += int(tailWrite - q.tail.read)
-	}
-
-	// Count items in linked segments
-	for seg := q.tail.next.Load(); seg != nil; seg = seg.next.Load() {
-		count += int(seg.write.Load())
-	}
-
-	return count
 }
 
 // Helpers
