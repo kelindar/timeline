@@ -183,7 +183,7 @@ func TestStart(t *testing.T) {
 
 func TestJobSize(t *testing.T) {
 	size := unsafe.Sizeof(job{})
-	assert.Equal(t, 24, int(size))
+	assert.Equal(t, 16, int(size))
 }
 
 func TestRunDuringTickDeadlocks(t *testing.T) {

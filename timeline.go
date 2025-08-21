@@ -11,9 +11,14 @@ import (
 )
 
 const (
-	resolution = 10 * time.Millisecond
-	numBuckets = int(1 * time.Second / resolution)
-	maxJobs    = 1e5 // ~ 10M ev/s
+	resolution   = 10 * time.Millisecond
+	numBuckets   = int(1 * time.Second / resolution)
+	maxJobs      = 1e5 // ~ 10M ev/s
+	recurringBit = 63
+	runAtBits    = 39
+	intervalBits = 24
+	runAtMask    = uint64((1<<runAtBits - 1) << intervalBits) // 39 bits for runAt
+	intervalMask = uint64((1<<intervalBits - 1))              // 24 bits for interval
 )
 
 // Task defines a scheduled function. 'now' is the execution time, and 'elapsed'
@@ -23,12 +28,57 @@ const (
 // interval. Returning 'false' implies that the task should not be executed again.
 type Task = func(now time.Time, elapsed time.Duration) bool
 
+// sched packs scheduling information into a 64-bit integer:
+// - Bit 63: recurring flag (1 = recurring, 0 = one-time)
+// - Bits 62-24: runAt time in ticks (39 bits)
+// - Bits 23-0: interval in ticks (24 bits)
+type sched uint64
+
 // job represents a scheduled task.
 type job struct {
 	Task
-	RunAt tick // When the task should run
-	Since span // Elapsed ticks between scheduled time and starting time
-	Every span // (optional) In ticks, how often the task should run (0 = once)
+	sched
+}
+
+// newSched creates a new packed scheduling data with the given values
+func newSched(runAt tick, interval span, recurring bool) sched {
+	var data uint64
+	if recurring {
+		data |= 1 << recurringBit
+	}
+
+	data |= uint64(runAt) << intervalBits & runAtMask
+	data |= uint64(interval) & intervalMask
+	return sched(data)
+}
+
+// RunAt returns the tick when the task should run
+func (s sched) RunAt() tick {
+	return tick((uint64(s) & runAtMask) >> intervalBits)
+}
+
+// Interval returns the interval in ticks
+func (s sched) Interval() span {
+	return span(uint64(s) & intervalMask)
+}
+
+// Recurring returns whether this task should repeat
+func (s sched) Recurring() bool {
+	return (uint64(s)>>recurringBit)&1 == 1
+}
+
+// WithRunAt creates a new scheduleData with updated runAt time
+func (s sched) WithRunAt(runAt tick) sched {
+	newData := uint64(s) & ^uint64(runAtMask) // Clear runAt bits
+	newData |= uint64(runAt) << intervalBits & runAtMask
+	return sched(newData)
+}
+
+// WithInterval creates a new scheduleData with updated interval
+func (s sched) WithInterval(interval span) sched {
+	newData := uint64(s) & ^uint64(intervalMask) // Clear interval bits
+	newData |= uint64(interval) & intervalMask
+	return sched(newData)
 }
 
 // bucket represents a bucket for a particular window of the second.
@@ -49,7 +99,7 @@ type Scheduler struct {
 func New() *Scheduler {
 	s := &Scheduler{
 		buckets: make([]*bucket, numBuckets),
-		pending: make([]job, 0, 64), // pre-allocate execution buffer
+		pending: make([]job, 0, 256), // pre-allocate execution buffer
 	}
 
 	for i := 0; i < numBuckets; i++ {
@@ -97,17 +147,20 @@ func (s *Scheduler) schedule(event Task, when tick, repeat span) {
 		time.Sleep(500 * time.Microsecond)
 	}
 
+	recurring := repeat > 0
+	if repeat == 0 {
+		repeat = span(when - s.now())
+	}
+
 	s.enqueueJob(job{
 		Task:  event,
-		RunAt: when,
-		Since: span(when - s.now()),
-		Every: repeat,
+		sched: newSched(when, repeat, recurring),
 	})
 }
 
 // enqueueJob adds a job to the queue. If the queue is full, it will wait briefly.
 func (s *Scheduler) enqueueJob(job job) {
-	bucket := s.bucketOf(job.RunAt)
+	bucket := s.bucketOf(job.RunAt())
 	bucket.mu.Lock()
 	bucket.queue = append(bucket.queue, job)
 	bucket.mu.Unlock()
@@ -130,7 +183,7 @@ func (s *Scheduler) Tick() time.Time {
 	s.pending = s.pending[:0] // reuse buffer
 	for _, task := range bucket.queue {
 		switch {
-		case task.RunAt > tickNow:
+		case task.RunAt() > tickNow:
 			bucket.queue[offset] = task
 			offset++
 		default:
@@ -142,14 +195,14 @@ func (s *Scheduler) Tick() time.Time {
 
 	// Execute tasks (without lock to prevent deadlock)
 	for _, task := range s.pending {
-		repeat := task.Task(timeNow, task.Since.Duration()) && task.Every != 0
-		nextTick := tickNow + tick(task.Every)
+		shouldContinue := task.Task(timeNow, task.Interval().Duration())
+		repeat := shouldContinue && task.Recurring()
+		nextTick := tickNow + tick(task.Interval())
 
 		switch {
 		case repeat && s.bucketOf(nextTick) == s.bucketOf(tickNow):
 			bucket.mu.Lock()
-			task.Since = span(nextTick - tickNow)
-			task.RunAt = nextTick
+			task.sched = task.sched.WithInterval(span(nextTick - tickNow)).WithRunAt(nextTick)
 			bucket.queue = append(bucket.queue, task)
 			bucket.mu.Unlock()
 		case repeat: // different bucket
@@ -157,9 +210,7 @@ func (s *Scheduler) Tick() time.Time {
 			bucket.mu.Lock()
 			bucket.queue = append(bucket.queue, job{
 				Task:  task.Task,
-				RunAt: nextTick,
-				Since: task.Every,
-				Every: task.Every,
+				sched: newSched(nextTick, task.Interval(), true),
 			})
 			bucket.mu.Unlock()
 		default:
