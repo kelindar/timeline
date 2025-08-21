@@ -115,7 +115,7 @@ func After[T event.Event](ev T, delay time.Duration) {
 			Time:    tickOf(now),
 			Elapsed: durationOf(elapsed),
 		})
-		return true
+		return false
 	}, delay)
 }
 
