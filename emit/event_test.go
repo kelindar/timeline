@@ -13,12 +13,12 @@ import (
 /*
 go test -bench=. -benchmem -benchtime=10s
 cpu: 13th Gen Intel(R) Core(TM) i7-13700K
-BenchmarkEvent/1x1-24         	38276168	        52.62 ns/op	        16.73 million/s	       1 B/op	       0 allocs/op
-BenchmarkEvent/1x10-24        	33396972	        44.04 ns/op	        76.11 million/s	      12 B/op	       0 allocs/op
-BenchmarkEvent/1x100-24       	51144136	        57.30 ns/op	        68.87 million/s	      11 B/op	       0 allocs/op
-BenchmarkEvent/10x1-24        	 5557052	       233.7 ns/op	        35.14 million/s	      15 B/op	       0 allocs/op
-BenchmarkEvent/10x10-24       	 2334117	       591.7 ns/op	        71.55 million/s	      81 B/op	       0 allocs/op
-BenchmarkEvent/10x100-24      	 1893919	       714.5 ns/op	        63.44 million/s	     116 B/op	       0 allocs/op
+BenchmarkEvent/1x1-24         	49567932	        23.05 ns/op	        29.03 million/s	       3 B/op	       0 allocs/op
+BenchmarkEvent/1x10-24        	57662643	        23.18 ns/op	        60.29 million/s	       8 B/op	       0 allocs/op
+BenchmarkEvent/1x100-24       	60567517	        54.51 ns/op	        72.32 million/s	      10 B/op	       0 allocs/op
+BenchmarkEvent/10x1-24        	 5801366	       224.5 ns/op	        49.58 million/s	      86 B/op	       0 allocs/op
+BenchmarkEvent/10x10-24       	 5055789	       218.1 ns/op	        81.23 million/s	     108 B/op	       0 allocs/op
+BenchmarkEvent/10x100-24      	 2404316	       512.2 ns/op	        71.51 million/s	     125 B/op	       0 allocs/op
 */
 func BenchmarkEvent(b *testing.B) {
 	for _, topics := range []int{1, 10} {

@@ -60,12 +60,12 @@ func (q *queue[T]) Push(v T) {
 			return
 		}
 
-		// Segment is full; create and link a new head segment while holding lock
-		newSeg := q.borrow()
-		newSeg.data[0] = v
-		newSeg.write.Store(1)
-		head.next.Store(newSeg)
-		q.head.Store(newSeg)
+		// Segment is full; create and link a new head seg while holding lock
+		seg := q.borrow()
+		seg.data[0] = v
+		seg.write.Store(1)
+		head.next.Store(seg)
+		q.head.Store(seg)
 		head.mu.Unlock()
 		return
 	}
@@ -75,15 +75,14 @@ func (q *queue[T]) Push(v T) {
 func (q *queue[T]) Drain(now time.Time, elapsed time.Duration) bool {
 	var zero T
 	for {
-		// Process all available data in current tail segment
-		segment := q.tail
-		writeAt := segment.write.Load()
+		seg := q.tail
+		idx := seg.write.Load()
 
-		// Process all items in this segment
-		for segment.read < writeAt {
-			val := segment.data[segment.read]
-			segment.data[segment.read] = zero // clear for GC
-			segment.read++
+		// Process all items in this segment, until the write index
+		for seg.read < idx {
+			val := seg.data[seg.read]
+			seg.data[seg.read] = zero // clear for GC
+			seg.read++
 
 			// Publish the event
 			event.Publish(event.Default, signal[T]{
@@ -93,15 +92,15 @@ func (q *queue[T]) Drain(now time.Time, elapsed time.Duration) bool {
 			})
 		}
 
-		// Current segment is exhausted, try to move to next
-		next := segment.next.Load()
+		// Current segment is exhausted
+		next := seg.next.Load()
 		if next == nil {
 			return true // empty
 		}
 
 		// Move to next segment and reset the current one
 		q.tail = next
-		q.reset(segment)
+		q.reset(seg)
 	}
 }
 
