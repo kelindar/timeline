@@ -64,7 +64,8 @@ func TestEmit(t *testing.T) {
 	Next(MyEvent2{Text: "Hello"})
 	<-events
 
-	Every(MyEvent2{Text: "Hello"}, 10*time.Millisecond)
+	cancel := Every(MyEvent2{Text: "Hello"}, 10*time.Millisecond)
+	defer cancel()
 	<-events
 }
 

@@ -53,11 +53,10 @@ func (q *Queue[T]) Push(v T) {
 			continue
 		}
 
-		writePos := head.write.Load()
-		if writePos < segmentSize {
-			// Space available in current segment
-			head.data[writePos] = v
-			head.write.Store(writePos + 1)
+		// Space available in current segment
+		if writeAt := head.write.Load(); writeAt < segmentSize {
+			head.data[writeAt] = v
+			head.write.Store(writeAt + 1)
 			head.mu.Unlock()
 			return
 		}
@@ -108,8 +107,6 @@ func (q *Queue[T]) Drain(now time.Time, elapsed time.Duration) bool {
 	}
 }
 
-// Helpers
-
 func (q *Queue[T]) newSegment() *segment[T] {
 	seg := q.pool.Get().(*segment[T])
 	seg.write.Store(0)
@@ -119,11 +116,6 @@ func (q *Queue[T]) newSegment() *segment[T] {
 }
 
 func (q *Queue[T]) reset(seg *segment[T]) {
-	// Clear the segment data for GC
-	var zero T
-	for i := range seg.data {
-		seg.data[i] = zero
-	}
 	seg.write.Store(0)
 	seg.read = 0
 	seg.next.Store(nil)
