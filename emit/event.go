@@ -6,8 +6,11 @@ package emit
 import (
 	"context"
 	"math"
+	"reflect"
+	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/kelindar/event"
 	"github.com/kelindar/timeline"
@@ -19,6 +22,88 @@ var Scheduler = func() *timeline.Scheduler {
 	s.Start(context.Background())
 	return s
 }()
+
+// ----------------------------------------- Driver (time wheel) -----------------------------------------
+
+const driverResolution = 10 * time.Millisecond
+const numBuckets = int(time.Second / driverResolution)
+
+var (
+	driverOnce  sync.Once
+	driverIdx   atomic.Int32
+	wheels      sync.Map // map[uint32]*wheelEntry
+	typedWheels sync.Map // map[uint32]any (*wheel[T])
+)
+
+type wheelEntry struct {
+	flush func(idx int, now time.Time, elapsed time.Duration)
+}
+
+type wheel[T event.Event] struct {
+	mu      sync.Mutex
+	current uint32 // Current tick position for this wheel
+	buckets [][]T
+}
+
+func newTypedWheel[T event.Event]() *wheel[T] {
+	w := &wheel[T]{
+		buckets: make([][]T, numBuckets),
+	}
+	for i := 0; i < numBuckets; i++ {
+		w.buckets[i] = make([]T, 0, 64)
+	}
+	return w
+}
+
+func (w *wheel[T]) enqueue(delta int, ev T) {
+	w.mu.Lock()
+	idx := (int(w.current) + delta) % numBuckets
+	w.buckets[idx] = append(w.buckets[idx], ev)
+	w.mu.Unlock()
+}
+
+func (w *wheel[T]) flush(idx int, now time.Time, elapsed time.Duration) {
+	w.mu.Lock()
+	w.current = uint32(idx) // Update wheel's current position
+	batch := w.buckets[idx]
+	w.buckets[idx] = w.buckets[idx][:0]
+	w.mu.Unlock()
+	for i := range batch {
+		event.Publish(event.Default, signal[T]{
+			Data:    batch[i],
+			Time:    now,
+			Elapsed: elapsed,
+		})
+	}
+}
+
+func wheelOf[T event.Event]() *wheel[T] {
+	key := hashOfT[T]()
+	if v, ok := typedWheels.Load(key); ok {
+		return v.(*wheel[T])
+	}
+
+	w := newTypedWheel[T]()
+	actual, loaded := typedWheels.LoadOrStore(key, w)
+	tw := actual.(*wheel[T])
+	if !loaded {
+		wheels.Store(key, &wheelEntry{flush: func(idx int, now time.Time, elapsed time.Duration) { tw.flush(idx, now, elapsed) }})
+	}
+	return tw
+}
+
+func ensureDriver() {
+	driverOnce.Do(func() {
+		Scheduler.RunEvery(func(now time.Time, elapsed time.Duration) bool {
+			idx := int(driverIdx.Add(1)-1) % numBuckets
+			wheels.Range(func(_ any, v any) bool {
+				v.(*wheelEntry).flush(idx, now, elapsed)
+				return true
+			})
+			return true
+		}, driverResolution)
+	})
+}
 
 // ----------------------------------------- Forward Event -----------------------------------------
 
@@ -110,17 +195,31 @@ func OnEvery(handler func(now time.Time, elapsed time.Duration) error, interval 
 
 // Next writes an event during the next tick.
 func Next[T event.Event](ev T) {
-	Scheduler.Run(emit(ev))
+	ensureDriver()
+	w := wheelOf[T]()
+	w.enqueue(1, ev)
 }
 
 // At writes an event at specific 'at' time.
 func At[T event.Event](ev T, at time.Time) {
-	Scheduler.RunAt(emit(ev), at)
+	ensureDriver()
+	w := wheelOf[T]()
+	delta := int(time.Until(at) / driverResolution)
+	if delta < 1 {
+		delta = 1
+	}
+	w.enqueue(delta, ev)
 }
 
 // After writes an event after a 'delay'.
 func After[T event.Event](ev T, after time.Duration) {
-	Scheduler.RunAfter(emit(ev), after)
+	ensureDriver()
+	w := wheelOf[T]()
+	steps := int(after / driverResolution)
+	if steps < 1 {
+		steps = 1
+	}
+	w.enqueue(steps, ev)
 }
 
 // Every writes an event at 'interval' intervals, starting at the next boundary tick.
@@ -155,8 +254,8 @@ func Error(err error, about any) {
 	})
 }
 
-// emit writes an event into the dispatcher
-func emit[T event.Event](ev T) func(now time.Time, elapsed time.Duration) bool {
+// emit creates an optimized task that avoids closure variable capture
+func emit[T event.Event](ev T) timeline.Task {
 	return func(now time.Time, elapsed time.Duration) bool {
 		event.Publish(event.Default, signal[T]{
 			Data:    ev,
@@ -167,7 +266,7 @@ func emit[T event.Event](ev T) func(now time.Time, elapsed time.Duration) bool {
 	}
 }
 
-// emitEvery creates a cancellable recurring event
+// emitEvery creates a cancellable recurring event with optimized closure
 func emitEvery[T event.Event](ev T, interval time.Duration, scheduler func(timeline.Task, time.Duration)) func() {
 	var cancelled atomic.Bool
 	task := func(now time.Time, elapsed time.Duration) bool {
@@ -183,4 +282,29 @@ func emitEvery[T event.Event](ev T, interval time.Duration, scheduler func(timel
 	return func() {
 		cancelled.Store(true)
 	}
+}
+
+func hashOfT[T any]() uint32 {
+	var result T
+	return loadHash(reflect.TypeOf(result))
+}
+
+// loadHash loads the hash of the given type, this is a hack to avoid
+// time consuming hashing every time and is not guaranteed to work in
+// future versions of Go.
+func loadHash(rt reflect.Type) uint32 {
+	return (*rtype)(unsafe.Pointer((*iface)(unsafe.Pointer(&rt)).data)).hash
+}
+
+type rtype struct {
+	size    uintptr
+	ptrdata uintptr // number of bytes in the type that can contain pointers
+	hash    uint32  // this is the unexported field
+	// ... rest omitted
+}
+
+// This struct matches the memory layout of an interface in Go.
+type iface struct {
+	typ  unsafe.Pointer
+	data unsafe.Pointer
 }
