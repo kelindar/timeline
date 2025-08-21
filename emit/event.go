@@ -6,11 +6,9 @@ package emit
 import (
 	"context"
 	"math"
-	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/kelindar/event"
 	"github.com/kelindar/timeline"
@@ -20,36 +18,35 @@ const (
 	resolution = 10 * time.Millisecond
 )
 
-// Scheduler is the default scheduler used to emit events.
-var Scheduler = func() *timeline.Scheduler {
-	s := timeline.New()
+// Scheduler is the default scheduler used to emit events on a timeline
+type Scheduler struct {
+	*timeline.Scheduler
+	queues sync.Map
+}
+
+// Default is the default scheduler used to emit events.
+var Default = func() *Scheduler {
+	s := &Scheduler{
+		Scheduler: timeline.New(),
+	}
+
 	s.Start(context.Background())
 	return s
 }()
 
 // ----------------------------------------- Queues -----------------------------------------
 
-var (
-	queues sync.Map // map[uint32]any (*queue[T])
-)
-
-func queueOf[T event.Event]() *queue[T] {
-	key := hashOfT[T]()
-	if v, ok := queues.Load(key); ok {
+func queueOf[T event.Event](s *Scheduler, eventType uint32) *queue[T] {
+	if v, ok := s.queues.Load(eventType); ok {
 		return v.(*queue[T])
 	}
 
-	actual, loaded := queues.LoadOrStore(key, newQueue[T]())
+	actual, loaded := s.queues.LoadOrStore(eventType, newQueue[T]())
 	w := actual.(*queue[T])
 	if !loaded {
-		Scheduler.RunEvery(w.Drain, resolution)
+		s.RunEvery(w.Drain, resolution)
 	}
 	return w
-}
-
-func emit[T event.Event](ev T) {
-	w := queueOf[T]()
-	w.Push(ev)
 }
 
 // ----------------------------------------- Forward Event -----------------------------------------
@@ -142,14 +139,15 @@ func OnEvery(handler func(now time.Time, elapsed time.Duration) error, interval 
 
 // Next writes an event during the next tick.
 func Next[T event.Event](ev T) {
-	emit(ev)
+	w := queueOf[T](Default, ev.Type())
+	w.Push(ev)
 }
 
 // Every writes an event at 'interval' intervals, starting at the next boundary tick.
 // Returns a cancel function to stop the recurring event.
 func Every[T event.Event](ev T, interval time.Duration) context.CancelFunc {
 	return emitEvery(ev, interval, func(task timeline.Task, interval time.Duration) {
-		Scheduler.RunEvery(task, interval)
+		Default.RunEvery(task, interval)
 	})
 }
 
@@ -177,29 +175,4 @@ func emitEvery[T event.Event](ev T, interval time.Duration, scheduler func(timel
 	return func() {
 		cancelled.Store(true)
 	}
-}
-
-func hashOfT[T any]() uint32 {
-	var result T
-	return loadHash(reflect.TypeOf(result))
-}
-
-// loadHash loads the hash of the given type, this is a hack to avoid
-// time consuming hashing every time and is not guaranteed to work in
-// future versions of Go.
-func loadHash(rt reflect.Type) uint32 {
-	return (*rtype)(unsafe.Pointer((*iface)(unsafe.Pointer(&rt)).data)).hash
-}
-
-type rtype struct {
-	size    uintptr
-	ptrdata uintptr // number of bytes in the type that can contain pointers
-	hash    uint32  // this is the unexported field
-	// ... rest omitted
-}
-
-// This struct matches the memory layout of an interface in Go.
-type iface struct {
-	typ  unsafe.Pointer
-	data unsafe.Pointer
 }
