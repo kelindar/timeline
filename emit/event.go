@@ -33,18 +33,14 @@ var (
 	queues sync.Map // map[uint32]any (*queue[T])
 )
 
-func newQueue[T event.Event]() *Queue[T] {
-	return NewQueue[T]()
-}
-
-func queueOf[T event.Event]() *Queue[T] {
+func queueOf[T event.Event]() *queue[T] {
 	key := hashOfT[T]()
 	if v, ok := queues.Load(key); ok {
-		return v.(*Queue[T])
+		return v.(*queue[T])
 	}
 
 	actual, loaded := queues.LoadOrStore(key, newQueue[T]())
-	w := actual.(*Queue[T])
+	w := actual.(*queue[T])
 	if !loaded {
 		Scheduler.RunEvery(w.Drain, resolution)
 	}

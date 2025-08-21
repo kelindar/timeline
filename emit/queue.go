@@ -19,17 +19,16 @@ type segment[T any] struct {
 	read  uint32                     // current read position (consumer only)
 }
 
-// Queue is a multiple-producer, single-consumer queue for values of type T.
-// Uses a linked list of fixed-size segments to minimize contention.
-// Optimized for Push/Drain usage pattern.
-type Queue[T event.Event] struct {
+// queue is a multiple-producer, single-consumer queue
+type queue[T event.Event] struct {
 	head atomic.Pointer[segment[T]] // producers write to head segment
 	tail *segment[T]                // consumer reads from tail segment
 	pool sync.Pool                  // recycles segments to reduce GC
 }
 
-func NewQueue[T event.Event]() *Queue[T] {
-	q := &Queue[T]{}
+// newQueue creates a new queue
+func newQueue[T event.Event]() *queue[T] {
+	q := &queue[T]{}
 	q.pool.New = func() any {
 		return new(segment[T])
 	}
@@ -42,7 +41,7 @@ func NewQueue[T event.Event]() *Queue[T] {
 }
 
 // Push is safe for concurrent producers.
-func (q *Queue[T]) Push(v T) {
+func (q *queue[T]) Push(v T) {
 	for {
 		head := q.head.Load()
 
@@ -73,7 +72,7 @@ func (q *Queue[T]) Push(v T) {
 }
 
 // Drain is called by the scheduler to publish events, single-consumer only.
-func (q *Queue[T]) Drain(now time.Time, elapsed time.Duration) bool {
+func (q *queue[T]) Drain(now time.Time, elapsed time.Duration) bool {
 	var zero T
 	for {
 		// Process all available data in current tail segment
@@ -106,7 +105,7 @@ func (q *Queue[T]) Drain(now time.Time, elapsed time.Duration) bool {
 	}
 }
 
-func (q *Queue[T]) borrow() *segment[T] {
+func (q *queue[T]) borrow() *segment[T] {
 	seg := q.pool.Get().(*segment[T])
 	seg.write.Store(0)
 	seg.read = 0
@@ -114,7 +113,7 @@ func (q *Queue[T]) borrow() *segment[T] {
 	return seg
 }
 
-func (q *Queue[T]) reset(seg *segment[T]) {
+func (q *queue[T]) reset(seg *segment[T]) {
 	seg.write.Store(0)
 	seg.read = 0
 	seg.next.Store(nil)
