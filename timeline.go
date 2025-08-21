@@ -37,12 +37,6 @@ type bucket struct {
 	queue []job
 }
 
-// run holds the context for executing a task
-type run struct {
-	task job
-	time time.Time
-}
-
 // Scheduler manages and executes scheduled tasks.
 type Scheduler struct {
 	next    atomic.Int64 // next tick
