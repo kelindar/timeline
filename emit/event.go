@@ -49,54 +49,13 @@ func queueOf[T event.Event](s *Scheduler, eventType uint32) *queue[T] {
 	return q
 }
 
-// ----------------------------------------- Forward Event -----------------------------------------
-
-// signal represents a forwarded event
-type signal[T event.Event] struct {
-	Time    time.Time     // The time at which the event was emitted
-	Elapsed time.Duration // The time elapsed since the last event
-	Data    T
-}
-
-// Type returns the type of the event
-func (e signal[T]) Type() uint32 {
-	return e.Data.Type()
-}
-
-// ----------------------------------------- Error Event -----------------------------------------
-
-// fault represents an error event
-type fault struct {
-	error
-	About any // The context of the error
-}
-
-// Type returns the type of the event
-func (e fault) Type() uint32 {
-	return math.MaxUint32
-}
-
-// ----------------------------------------- Timer Event -----------------------------------------
-
-var nextTimerID uint32 = 1 << 30
-
-// Timer represents a Timer event
-type Timer struct {
-	ID uint32
-}
-
-// Type returns the type of the event
-func (e Timer) Type() uint32 {
-	return e.ID
-}
-
 // ----------------------------------------- Subscribe -----------------------------------------
 
 // On subscribes to an event, the type of the event will be automatically
 // inferred from the provided type. Must be constant for this to work.
 func On[T event.Event](handler func(event T, now time.Time, elapsed time.Duration) error) context.CancelFunc {
 	return event.Subscribe(event.Default, func(m signal[T]) {
-		if err := handler(m.Data, m.Time, m.Elapsed); err != nil {
+		if err := handler(m.Data, m.Time.Time(), m.Elapsed.Duration()); err != nil {
 			Error(err, m.Data)
 		}
 	})
@@ -105,7 +64,7 @@ func On[T event.Event](handler func(event T, now time.Time, elapsed time.Duratio
 // OnType subscribes to an event with the specified event type.
 func OnType[T event.Event](eventType uint32, handler func(event T, now time.Time, elapsed time.Duration) error) context.CancelFunc {
 	return event.SubscribeTo(event.Default, eventType, func(m signal[T]) {
-		if err := handler(m.Data, m.Time, m.Elapsed); err != nil {
+		if err := handler(m.Data, m.Time.Time(), m.Elapsed.Duration()); err != nil {
 			Error(err, m.Data)
 		}
 	})
@@ -147,8 +106,8 @@ func After[T event.Event](ev T, delay time.Duration) {
 	Default.RunAfter(func(now time.Time, elapsed time.Duration) bool {
 		event.Publish(event.Default, signal[T]{
 			Data:    ev,
-			Time:    now,
-			Elapsed: elapsed,
+			Time:    tickOf(now),
+			Elapsed: durationOf(elapsed),
 		})
 		return true
 	}, delay)
@@ -160,4 +119,61 @@ func Error(err error, about any) {
 		error: err,
 		About: about,
 	})
+}
+
+// ----------------------------------------- Forward Event -----------------------------------------
+
+// signal represents a forwarded event
+type signal[T event.Event] struct {
+	Time    tick // The time at which the event was emitted
+	Elapsed span // The time elapsed since the last event
+	Data    T
+}
+
+// Type returns the type of the event
+func (e signal[T]) Type() uint32 {
+	return e.Data.Type()
+}
+
+// ----------------------------------------- Error Event -----------------------------------------
+
+// fault represents an error event
+type fault struct {
+	error
+	About any // The context of the error
+}
+
+// Type returns the type of the event
+func (e fault) Type() uint32 {
+	return math.MaxUint32
+}
+
+// ----------------------------------------- Time (in ticks) -----------------------------------------
+
+// tick represents a point in time, rounded up to the resolution of the clock.
+type tick int64
+
+// Time converts the tick to a timestamp.
+func (t tick) Time() time.Time {
+	return time.Unix(0, int64(t)*int64(resolution))
+}
+
+// tickOf returns the time rounded up to the resolution of the clock.
+func tickOf(t time.Time) tick {
+	return tick(t.UnixNano() / int64(resolution))
+}
+
+// ----------------------------------------- Duration (in ticks) -----------------------------------------
+
+// span represents a time span (duration) in ticks
+type span uint32
+
+// Duration converts the span to a duration.
+func (s span) Duration() time.Duration {
+	return time.Duration(s) * resolution
+}
+
+// durationOf computes a duration in terms of ticks.
+func durationOf(t time.Duration) span {
+	return span(t / resolution)
 }

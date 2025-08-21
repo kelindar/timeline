@@ -88,8 +88,8 @@ func (q *queue[T]) Drain(now time.Time, elapsed time.Duration) bool {
 			// Publish the event
 			event.Publish(event.Default, signal[T]{
 				Data:    val,
-				Time:    now,
-				Elapsed: elapsed,
+				Time:    tickOf(now),
+				Elapsed: durationOf(elapsed),
 			})
 		}
 
