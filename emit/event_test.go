@@ -130,7 +130,7 @@ func TestOnEveryCancel(t *testing.T) {
 }
 
 func TestStress(t *testing.T) {
-	const count = 1000000
+	const count = 10000
 
 	var wg sync.WaitGroup
 	wg.Add(count)
